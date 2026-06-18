@@ -152,8 +152,16 @@ function ObterCaminhoPasta {
 }
 
 function Iniciar-Sincronizacao {
+<#
+.SYNOPSIS
+    Menu unificado de sincronizacao (v15): junta os modos antes separados em "1" e "1.1".
+.DESCRIPTION
+    Seleciona origem/destino e oferece, num so lugar, todos os modos com a engine segura
+    (checagem de espaco, log e dry-run): SIMULAR, copiar unilateral segura, copiar unilateral
+    COMPLETA (/COPYALL, preserva ACL/owner), ESPELHAR (/MIR, destrutivo) e ESTIMAR espaco.
+#>
     Clear-Host
-    Write-Host "--- MÓDULO DE SINCRONIZAÇÃO DE ARQUIVOS ---" -ForegroundColor Cyan
+    Write-Host "--- SINCRONIZAÇÃO DE ARQUIVOS ---" -ForegroundColor Cyan
 
     $origemObj = Selecionar-DiretorioDaLista -Titulo "Selecione a ORIGEM da sincronização"
     if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
@@ -161,13 +169,63 @@ function Iniciar-Sincronizacao {
     $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO da sincronização"
     if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
 
-    $origem = $origemObj.Caminho
+    $origem  = $origemObj.Caminho
     $destino = $destinoObj.Caminho
 
-    $modoSincronizacao = ObterModoSincronizacao
-    if (-not $modoSincronizacao) { Write-Host "Operação cancelada pelo usuário."; Pause-Script; return }
+    Clear-Host
+    Write-Host "ORIGEM : $origem"  -ForegroundColor Green
+    Write-Host "DESTINO: $destino" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Escolha a operação:" -ForegroundColor Cyan
+    Write-Host "  1) SIMULAR (dry-run) - não copia, só lista o que faria"
+    Write-Host "  2) COPIAR unilateral SEGURA (dados/tempo; sem permissões)"
+    Write-Host "  3) COPIAR unilateral COMPLETA (/COPYALL: preserva ACL/owner - entre servidores)"
+    Write-Host "  4) ESPELHAR (/MIR) - destino vira cópia EXATA da origem (APAGA extras no destino)" -ForegroundColor Red
+    Write-Host "  5) ESTIMAR tamanho x espaço (relatório)"
+    Write-Host "  C) Cancelar"
+    $opt = Read-Host "Sua opção"
 
-    Executar-Robocopy -Origem $origem -Destino $destino -ModoSincronizacao $modoSincronizacao
+    switch ($opt.ToUpper()) {
+        '1' {
+            Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino -Simular
+            Pause-Script
+        }
+        '2' {
+            if (Confirm-Action -Prompt "Confirma cópia unilateral SEGURA?") {
+                Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino
+            }
+            Pause-Script
+        }
+        '3' {
+            if (Confirm-Action -Prompt "Confirma cópia unilateral COMPLETA (/COPYALL)?") {
+                Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino -PreservarTudo
+            }
+            Pause-Script
+        }
+        '4' {
+            Write-Warning "ESPELHO /MIR é DESTRUTIVO: apaga no destino tudo que não existe na origem."
+            if (Confirm-Action -Prompt "Deseja SIMULAR primeiro (dry-run)?") {
+                Start-RobocopyEspelho -Origem $origem -Destino $destino -Simular
+                if (-not (Confirm-Action -Prompt "Revisou a simulação. Executar o espelho DE VERDADE agora?")) {
+                    Write-Host "Cancelado."; Pause-Script; return
+                }
+            }
+            if (Confirm-Action -Prompt "CONFIRMAÇÃO FINAL: espelhar (pode APAGAR arquivos no destino)?") {
+                Start-RobocopyEspelho -Origem $origem -Destino $destino
+            } else { Write-Host "Cancelado." }
+            Pause-Script
+        }
+        '5' {
+            $cmp = Comparar-EspacoVsOrigemV2 -Origem $origem -Destino $destino
+            "`n--- RELATÓRIO ---"
+            "Origem........: {0:N2} GB" -f $cmp.OrigemGB
+            "Livre destino.: {0:N2} GB" -f $cmp.LivresDestinoGB
+            "Margem........: {0:N2} GB" -f $cmp.MargemGB
+            "Pode copiar?..: {0}" -f $( if ($cmp.PodeCopiar) { "SIM" } else { "NÃO" } )
+            Pause-Script
+        }
+        default { Write-Host "Cancelado."; Pause-Script }
+    }
 }
 
 function Executar-Robocopy {
@@ -430,13 +488,15 @@ function Start-RobocopyUnilateralSeguro {
         [Parameter(Mandatory=$true)][string]$Destino,
         [switch]$Simular,          # adiciona /L (lista sem copiar)
         [switch]$IgnorarEspaco,    # pula checagem de espaço
+        [switch]$PreservarTudo,    # /COPYALL (ACL/owner/auditing) em vez de /COPY:DAT
         [double]$MinLivresGB = 1.0
     )
 
+    $copiaDesc = if ($PreservarTudo) { 'COMPLETA (/COPYALL: ACL/owner)' } else { 'segura (/COPY:DAT)' }
     Write-Host "------------------------------------------------" -ForegroundColor Cyan
     Write-Host "Origem : $Origem"
     Write-Host "Destino: $Destino"
-    Write-Host "Modo   : Unilateral (seguro) $(if($Simular){' - SIMULAÇÃO (/L)'}else{''})"
+    Write-Host "Modo   : Unilateral $copiaDesc$(if($Simular){' - SIMULAÇÃO (/L)'}else{''})"
     Write-Host "------------------------------------------------" -ForegroundColor Cyan
 
     if (-not $IgnorarEspaco) {
@@ -449,7 +509,9 @@ function Start-RobocopyUnilateralSeguro {
 
     $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
 
-    $args = @(
+    # /COPYALL preserva ACL/owner/auditing (precisa admin); /COPY:DAT evita Owner/SACL.
+    $copyFlag = if ($PreservarTudo) { '/COPYALL' } else { '/COPY:DAT' }
+    $rcArgs = @(
         $Origem, $Destino,
         '/E',                # subpastas (inclui vazias)
         '/XO',               # pula fonte mais antiga que destino
@@ -459,14 +521,15 @@ function Start-RobocopyUnilateralSeguro {
         '/V','/TEE',
         "/LOG+:$log",
         '/DCOPY:DAT',        # dados/atributos/tempo em diretórios
-        '/COPY:DAT'          # dados/atributos/tempo em arquivos (evita Owner/SACL)
+        $copyFlag
         # opcional: '/FFT'   # tolerância FAT (se copiar para NAS não-Windows)
     )
-    if ($Simular) { $args += '/L' }
+    if ($Simular) { $rcArgs += '/L' }
 
     Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
-    & robocopy @args
+    & robocopy @rcArgs
     $rc = $LASTEXITCODE
+    Registrar-Log ("Robocopy unilateral {0} {1} -> {2} (rc={3}){4}" -f $copiaDesc, $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
 
     if     ($rc -ge 8) { Write-Error   "Robocopy terminou com erros (código $rc). Veja o log: $log" }
     elseif ($rc -ge 1) { Write-Host    "Concluído com sucesso (houve cópias/atualizações). Log: $log" -ForegroundColor Green }
@@ -483,47 +546,59 @@ function Executar-RobocopyUnilateral {
     Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -IgnorarEspaco:$IgnorarEspaco
 }
 
-function Iniciar-SincronizacaoV2 {
-    Clear-Host
-    Write-Host "--- MÓDULO DE SINCRONIZAÇÃO (V2 - Seguro) ---" -ForegroundColor Cyan
+function Start-RobocopyEspelho {
+    <#
+      .SYNOPSIS  Espelha Origem -> Destino com /MIR (DESTRUTIVO: apaga no destino o que nao existe na origem).
+      .DESCRIPTION  Checa espaco (V2), loga e suporta /L (dry-run). Preserva ACL/owner via /COPYALL.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Origem,
+        [Parameter(Mandatory=$true)][string]$Destino,
+        [switch]$Simular,
+        [switch]$IgnorarEspaco,
+        [double]$MinLivresGB = 1.0
+    )
 
-    $origemObj  = Selecionar-DiretorioDaLista -Titulo "Selecione a ORIGEM (V2)"
-    if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
-    $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO (V2)"
-    if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+    Write-Host "------------------------------------------------" -ForegroundColor Red
+    Write-Host "Origem : $Origem"
+    Write-Host "Destino: $Destino"
+    Write-Host "Modo   : ESPELHO /MIR$(if($Simular){' - SIMULAÇÃO (/L)'}else{''})" -ForegroundColor Red
+    Write-Host "AVISO: tudo no destino que NAO existe na origem sera APAGADO." -ForegroundColor Red
+    Write-Host "------------------------------------------------" -ForegroundColor Red
 
-    $origem  = $origemObj.Caminho
-    $destino = $destinoObj.Caminho
-
-    Write-Host ""
-    Write-Host "Escolha o que deseja fazer:" -ForegroundColor Cyan
-    Write-Host "  1) SIMULAR (dry-run) - não copia, só lista"
-    Write-Host "  2) COPIAR (unilateral segura)"
-    Write-Host "  3) ESTIMAR tamanho x espaço (relatório)"
-    Write-Host "  C) Cancelar"
-    $opt = Read-Host "Sua opção"
-
-    switch ($opt) {
-        '1' {
-            Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino -Simular
-        }
-        '2' {
-            Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino
-        }
-        '3' {
-            $cmp = Comparar-EspacoVsOrigemV2 -Origem $origem -Destino $destino
-            "`n--- RELATÓRIO ---"
-            "Origem........: {0:N2} GB" -f $cmp.OrigemGB
-            "Livre destino.: {0:N2} GB" -f $cmp.LivresDestinoGB
-            "Margem........: {0:N2} GB" -f $cmp.MargemGB
-            "Pode copiar?..: {0}" -f $( if ($cmp.PodeCopiar) { "SIM" } else { "NÃO" } )
-            Pause-Script
-        }
-        default {
-            Write-Host "Cancelado."
-            Pause-Script
+    if (-not $IgnorarEspaco) {
+        $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
+        if (-not $ok) {
+            Write-Warning "Espaço não validado/suficiente. Use -IgnorarEspaco para prosseguir mesmo assim."
+            return
         }
     }
+
+    $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
+    $rcArgs = @(
+        $Origem, $Destino,
+        '/MIR',              # espelha (inclui exclusao de extras no destino)
+        '/COPYALL',          # ACL/owner/auditing
+        '/R:1','/W:1','/XJ','/MT:8','/V','/TEE',
+        "/LOG+:$log",
+        '/DCOPY:DAT'
+    )
+    if ($Simular) { $rcArgs += '/L' }
+
+    Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
+    & robocopy @rcArgs
+    $rc = $LASTEXITCODE
+    Registrar-Log ("Robocopy ESPELHO /MIR {0} -> {1} (rc={2}){3}" -f $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
+
+    if     ($rc -ge 8) { Write-Error "Robocopy terminou com erros (código $rc). Veja o log: $log" }
+    elseif ($rc -ge 1) { Write-Host  "Espelhamento concluído. Log: $log" -ForegroundColor Green }
+    else               { Write-Host  "Nada a alterar (já idêntico). Log: $log" -ForegroundColor Green }
+}
+
+function Iniciar-SincronizacaoV2 {
+    # Retrocompat (v15): os menus "1" e "1.1" foram unificados em Iniciar-Sincronizacao.
+    Iniciar-Sincronizacao
 }
 
 function Agendar-TarefaSincronizacao {
@@ -552,4 +627,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Start-RobocopyUnilateralSeguro, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

@@ -1289,8 +1289,7 @@ switch ($Acao.ToUpper()) {
             Write-Host "======================================================" -ForegroundColor DarkGray
             Write-Host "  SUPER FERRAMENTA DE ENGENHARIA - v15.0 (Consolidado)" -ForegroundColor Green
             Write-Host "======================================================" -ForegroundColor DarkGray
-            Write-Host " 1 - Sincronização de Arquivos V2"
-            Write-Host " 1.1 - Sincronização de Arquivos (antigo)"
+            Write-Host " 1 - Sincronização de Arquivos (simular/copiar/espelhar)"
             Write-Host " 2 - Otimização e Reparo do Sistema"
             Write-Host " 3 - Gerenciamento de Ativação (Oficial)"
             Write-Host " 4 - Gerenciar Diretórios Salvos" -ForegroundColor Yellow
@@ -1313,8 +1312,7 @@ switch ($Acao.ToUpper()) {
             $escolha = Read-Host "Digite sua escolha e pressione Enter"
 
             switch ($escolha.ToUpper()) {
-                '1'  { Iniciar-SincronizacaoV2 }
-                '1.1'{ Iniciar-Sincronizacao }
+                '1'  { Iniciar-Sincronizacao }
                 '2'  { Menu-Otimizacao }
                 '3'  { Menu-Ativacao }
                 '4'  { Menu-GerenciamentoDiretorios }

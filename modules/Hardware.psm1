@@ -102,6 +102,31 @@ function Monitorar-Recursos {
     }
 }
 
+# PURA (Fase B): correlaciona discos do Win32_DiskDrive ($Base) com o Get-PhysicalDisk
+# ($PhysicalDisks) por SerialNumber ou FriendlyName, devolvendo objetos enriquecidos com
+# MediaType (SSD/HDD) e BusType quando ha' casamento. Sem CIM nem UI -> testavel.
+function Merge-DiscoFisico {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Base,
+        [AllowEmptyCollection()][object[]]$PhysicalDisks = @()
+    )
+    foreach ($d in $Base) {
+        $match = $PhysicalDisks | Where-Object {
+            ($_.SerialNumber -and $_.SerialNumber -eq $d.SerialNumber) -or
+            ($_.FriendlyName -and $d.Model -and $d.Model -like "*$($_.FriendlyName)*")
+        } | Select-Object -First 1
+        [pscustomobject]@{
+            Model          = $d.Model
+            Interface      = if ($match) { $match.BusType } else { $d.InterfaceType }
+            MediaType      = if ($match) { $match.MediaType } else { $null }   # SSD/HDD quando disponivel
+            'Tamanho (GB)' = $d.'Tamanho (GB)'
+            SerialNumber   = $d.SerialNumber
+            Firmware       = $d.FirmwareRevision
+        }
+    }
+}
+
 function Diagnostico-Hardware {
     Clear-Host
     Write-Host "--- DIAGNÓSTICO DE HARDWARE E SISTEMA ---" -ForegroundColor Cyan
@@ -146,22 +171,7 @@ function Diagnostico-Hardware {
     $temStorage = Get-Command Get-PhysicalDisk -ErrorAction SilentlyContinue
     if ($temStorage) {
         $pd = Get-PhysicalDisk | Select-Object FriendlyName, SerialNumber, MediaType, BusType
-        $saida =
-            foreach ($d in $fisicosBase) {
-                $match = $pd | Where-Object {
-                    ($_.SerialNumber -and $_.SerialNumber -eq $d.SerialNumber) -or
-                    ($_.FriendlyName -and $d.Model -and $d.Model -like "*$($_.FriendlyName)*")
-                } | Select-Object -First 1
-
-                [pscustomobject]@{
-                    Model        = $d.Model
-                    Interface    = if ($match) { $match.BusType } else { $d.InterfaceType }
-                    'MediaType'  = if ($match) { $match.MediaType } else { $null }   # SSD/HDD (quando disponível)
-                    'Tamanho (GB)' = $d.'Tamanho (GB)'
-                    SerialNumber = $d.SerialNumber
-                    Firmware     = $d.FirmwareRevision
-                }
-            }
+        $saida = Merge-DiscoFisico -Base @($fisicosBase) -PhysicalDisks @($pd)   # correlacao pura, testada
         $saida | Format-Table -AutoSize
     }
     else {
@@ -235,4 +245,4 @@ function Get-CpuUsageRobusto {
     return $null
 }
 
-Export-ModuleMember -Function Get-CpuRapido, Get-MemUsoMB, Get-DiscosInfo, Monitorar-Recursos, Diagnostico-Hardware, Get-CpuUsageRobusto
+Export-ModuleMember -Function Get-CpuRapido, Get-MemUsoMB, Get-DiscosInfo, Merge-DiscoFisico, Monitorar-Recursos, Diagnostico-Hardware, Get-CpuUsageRobusto

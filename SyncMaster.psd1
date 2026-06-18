@@ -49,9 +49,9 @@
         'Remove-ToRecycleBin','Menu-GerenciamentoArquivos','Encontrar-ArquivosDuplicados',
         'Verificar-IntegridadeArquivos','Permissoes-Pasta',
         # Hardware
-        'Get-CpuRapido','Get-MemUsoMB','Get-DiscosInfo','Monitorar-Recursos','Diagnostico-Hardware','Get-CpuUsageRobusto',
+        'Get-CpuRapido','Get-MemUsoMB','Get-DiscosInfo','Merge-DiscoFisico','Monitorar-Recursos','Diagnostico-Hardware','Get-CpuUsageRobusto',
         # Rede
-        'Menu-DiagnosticoRede','Test-TcpPort','Testar-PortaTCP','Ping-Sweep','Scan-PortasTCP','Scan-ARP',
+        'Menu-DiagnosticoRede','Test-TcpPort','Testar-PortaTCP','Ping-Sweep','ConvertFrom-PortSpec','Scan-PortasTCP','Scan-ARP',
         'Descobrir-Hostnames','Whois-Lookup','Scan-Servicos','Mostrar-Netstat','Instalar-e-Testar-Speedtest',
         'Menu-Rede','Configurar-TcpAutoTuning','Otimizar-QoS',
         # Ativacao

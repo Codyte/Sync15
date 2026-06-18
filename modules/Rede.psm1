@@ -92,19 +92,32 @@ function Ping-Sweep {
     Pause-Script
 }
 
+# PURA (Fase B): converte uma especificacao de portas ("20-25,80,443") numa lista de
+# inteiros ordenada e sem repeticao, descartando tokens invalidos e fora de [1..65535].
+# Sem UI -> testavel. Separadores aceitos: virgula, ponto-e-virgula e espaco.
+function ConvertFrom-PortSpec {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Spec)
+    $portas = [System.Collections.Generic.List[int]]::new()
+    foreach ($faixa in ($Spec -split '[,; ]')) {
+        $faixa = $faixa.Trim()
+        if (-not $faixa) { continue }
+        if ($faixa -match '^(\d+)-(\d+)$') {
+            $start = [int]$Matches[1]; $end = [int]$Matches[2]
+            if ($start -le $end) {
+                for ($p = $start; $p -le $end; $p++) { if ($p -ge 1 -and $p -le 65535) { [void]$portas.Add($p) } }
+            }
+        } elseif ($faixa -match '^\d+$') {
+            $p = [int]$faixa; if ($p -ge 1 -and $p -le 65535) { [void]$portas.Add($p) }
+        }
+    }
+    return @($portas | Sort-Object -Unique)
+}
+
 function Scan-PortasTCP {
     $alvo = Read-Host "Digite o host/IP para escanear"
     $portas = Read-Host "Digite a faixa de portas (ex: 20-25,80,443)"
-    $listaPortas = [System.Collections.Generic.List[int]]::new()
-    foreach ($faixa in $portas -split ",") {
-        $faixa = $faixa.Trim()
-        if ($faixa -match '^(\d+)-(\d+)$') {
-            $start = [int]$Matches[1]; $end = [int]$Matches[2]
-            if ($start -le $end) { for ($p = $start; $p -le $end; $p++) { $listaPortas.Add($p) } }
-        } elseif ($faixa -match '^\d+$') {
-            $listaPortas.Add([int]$faixa)
-        }
-    }
+    $listaPortas = ConvertFrom-PortSpec -Spec $portas   # logica pura, testada
     if ($listaPortas.Count -eq 0) { Write-Warning "Nenhuma porta válida informada."; Pause-Script; return }
 
     # Teste direto com timeout (sem Start-Job: antes era serial + overhead de processo
@@ -409,4 +422,4 @@ function Otimizar-QoS {
     } while ($true)
 }
 
-Export-ModuleMember -Function Menu-DiagnosticoRede, Test-TcpPort, Testar-PortaTCP, Ping-Sweep, Scan-PortasTCP, Scan-ARP, Descobrir-Hostnames, Whois-Lookup, Scan-Servicos, Mostrar-Netstat, Instalar-e-Testar-Speedtest, Menu-Rede, Configurar-TcpAutoTuning, Otimizar-QoS
+Export-ModuleMember -Function Menu-DiagnosticoRede, Test-TcpPort, Testar-PortaTCP, Ping-Sweep, ConvertFrom-PortSpec, Scan-PortasTCP, Scan-ARP, Descobrir-Hostnames, Whois-Lookup, Scan-Servicos, Mostrar-Netstat, Instalar-e-Testar-Speedtest, Menu-Rede, Configurar-TcpAutoTuning, Otimizar-QoS

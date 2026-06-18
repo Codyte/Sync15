@@ -50,7 +50,17 @@ function Start-PowerShellInstallation {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerPath -UseBasicParsing
         Write-Host "Download concluído: $InstallerPath" -ForegroundColor Green
-        Write-Host "Iniciando o instalador. Siga as instruções na tela..." -ForegroundColor Yellow
+
+        # Verifica a assinatura Authenticode antes de executar (cadeia valida + assinado pela Microsoft).
+        $sig = Get-AuthenticodeSignature -FilePath $InstallerPath
+        $signer = $sig.SignerCertificate.Subject
+        if ($sig.Status -ne 'Valid' -or $signer -notmatch 'Microsoft') {
+            Write-Warning ("Assinatura do instalador NAO confiavel (Status={0}; Signer={1}). ABORTANDO." -f $sig.Status, $signer)
+            Remove-Item -LiteralPath $InstallerPath -Force -ErrorAction SilentlyContinue
+            Pause-Script
+            return
+        }
+        Write-Host ("Assinatura válida (Microsoft). Iniciando o instalador..." ) -ForegroundColor Green
         Start-Process msiexec.exe -ArgumentList "/i `"$InstallerPath`"" -Wait
         Write-Host "Instalação da versão $Version concluída!" -ForegroundColor Green
     }

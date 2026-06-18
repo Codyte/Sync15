@@ -37,17 +37,33 @@ function Menu-DiagnosticoRede {
     } while ($true)
 }
 
+function Test-TcpPort {
+    # Teste de porta TCP NAO-bloqueante com timeout (BeginConnect+WaitOne).
+    # O .Connect() sincrono trava ~20s em portas filtradas; isto retorna em $TimeoutMs.
+    param(
+        [Parameter(Mandatory=$true)][string]$ComputerName,
+        [Parameter(Mandatory=$true)][int]$Port,
+        [int]$TimeoutMs = 600
+    )
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    try {
+        $iar = $tcp.BeginConnect($ComputerName, $Port, $null, $null)
+        if ($iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false) -and $tcp.Connected) {
+            $tcp.EndConnect($iar)
+            return $true
+        }
+        return $false
+    } catch { return $false }
+    finally { $tcp.Close() }
+}
+
 function Testar-PortaTCP {
     $hostIP = Read-Host "Digite o host/IP para testar"
-    $porta = Read-Host "Digite a porta TCP para testar"
-    try {
-        $tcp = New-Object System.Net.Sockets.TcpClient
-        $tcp.Connect($hostIP, [int]$porta)
-        if ($tcp.Connected) {
-            Write-Host "Porta $porta ABERTA em $hostIP" -ForegroundColor Green
-            $tcp.Close()
-        }
-    } catch {
+    $porta  = Read-Host "Digite a porta TCP para testar"
+    if ($porta -notmatch '^\d+$') { Write-Warning "Porta inválida."; Pause-Script; return }
+    if (Test-TcpPort -ComputerName $hostIP -Port ([int]$porta)) {
+        Write-Host "Porta $porta ABERTA em $hostIP" -ForegroundColor Green
+    } else {
         Write-Warning "Porta $porta FECHADA ou inacessível em $hostIP"
     }
     Pause-Script
@@ -68,31 +84,28 @@ function Ping-Sweep {
 function Scan-PortasTCP {
     $alvo = Read-Host "Digite o host/IP para escanear"
     $portas = Read-Host "Digite a faixa de portas (ex: 20-25,80,443)"
-    $listaPortas = @()
+    $listaPortas = [System.Collections.Generic.List[int]]::new()
     foreach ($faixa in $portas -split ",") {
-        if ($faixa -match "-") {
-            $start,$end = $faixa -split "-"
-            $listaPortas += $start..$end
-        } else {
-            $listaPortas += [int]$faixa
+        $faixa = $faixa.Trim()
+        if ($faixa -match '^(\d+)-(\d+)$') {
+            $start = [int]$Matches[1]; $end = [int]$Matches[2]
+            if ($start -le $end) { for ($p = $start; $p -le $end; $p++) { $listaPortas.Add($p) } }
+        } elseif ($faixa -match '^\d+$') {
+            $listaPortas.Add([int]$faixa)
         }
     }
+    if ($listaPortas.Count -eq 0) { Write-Warning "Nenhuma porta válida informada."; Pause-Script; return }
 
+    # Teste direto com timeout (sem Start-Job: antes era serial + overhead de processo
+    # por porta + hang de ~20s em portas filtradas).
+    $abertas = 0
     foreach ($porta in $listaPortas) {
-        $job = Start-Job -ScriptBlock {
-            param($alvo, $porta)
-            $tcp = New-Object System.Net.Sockets.TcpClient
-            try {
-                $tcp.Connect($alvo, [int]$porta)
-                if ($tcp.Connected) {
-                    return "Porta $porta ABERTA em $alvo"
-                }
-            } catch { Write-Verbose $_.Exception.Message }
-            finally { $tcp.Close() }
-        } -ArgumentList $alvo, $porta
-        $job | Wait-Job | Receive-Job | Write-Host -ForegroundColor Green
-        Remove-Job -Job $job
+        if (Test-TcpPort -ComputerName $alvo -Port $porta -TimeoutMs 500) {
+            Write-Host "Porta $porta ABERTA em $alvo" -ForegroundColor Green
+            $abertas++
+        }
     }
+    Write-Host ("Scan concluído: {0} porta(s) aberta(s) de {1} testada(s)." -f $abertas, $listaPortas.Count) -ForegroundColor Cyan
     Pause-Script
 }
 
@@ -155,8 +168,8 @@ function Instalar-e-Testar-Speedtest {
         if (-not $cmd) { return $false }
 
         # Aceita licença/GPDR na 1ª execução; usa JSON para normalizar saída
-        $args = @('--accept-license','--accept-gdpr','-f','json')
-        $out = & $cmd.Source $args 2>$null
+        $stArgs = @('--accept-license','--accept-gdpr','-f','json')
+        $out = & $cmd.Source $stArgs 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $out) { return $false }
 
         if ($Json) { $out | Write-Output; return $true }
@@ -366,4 +379,4 @@ function Otimizar-QoS {
     } while ($true)
 }
 
-Export-ModuleMember -Function Menu-DiagnosticoRede, Testar-PortaTCP, Ping-Sweep, Scan-PortasTCP, Scan-ARP, Descobrir-Hostnames, Whois-Lookup, Scan-Servicos, Mostrar-Netstat, Instalar-e-Testar-Speedtest, Menu-Rede, Configurar-TcpAutoTuning, Otimizar-QoS
+Export-ModuleMember -Function Menu-DiagnosticoRede, Test-TcpPort, Testar-PortaTCP, Ping-Sweep, Scan-PortasTCP, Scan-ARP, Descobrir-Hostnames, Whois-Lookup, Scan-Servicos, Mostrar-Netstat, Instalar-e-Testar-Speedtest, Menu-Rede, Configurar-TcpAutoTuning, Otimizar-QoS

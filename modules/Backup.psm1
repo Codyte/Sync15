@@ -41,6 +41,12 @@ function Clonar-Disco {
     $origem = Read-Host "Letra do disco ORIGEM (ex: E:)"
     $destino = Read-Host "Letra do disco DESTINO (ex: F:)"
     if ($origem -eq $destino) { Write-Warning "Origem e destino não podem ser iguais!"; Pause-Script; return }
+    # 'dd' NAO existe no Windows por padrao — sem isto a clonagem falha com erro criptico.
+    if (-not (Get-Command dd -ErrorAction SilentlyContinue)) {
+        Write-Warning "Ferramenta 'dd' não encontrada no PATH. Instale o 'dd for Windows' (ex.: chocolatey 'dd', ou GnuWin) e tente novamente."
+        Pause-Script
+        return
+    }
     $confirm = Confirm-Action "AVISO: Todos os dados do disco DESTINO ($destino) serão APAGADOS! Continuar?"
     if ($confirm) {
         Write-Host "Iniciando clonagem (esta operação pode demorar e não mostra barra de progresso)..." -ForegroundColor Yellow

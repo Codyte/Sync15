@@ -95,10 +95,18 @@ function Diagnostico-Hardware {
     Clear-Host
     Write-Host "--- DIAGNÓSTICO DE HARDWARE E SISTEMA ---" -ForegroundColor Cyan
 
-    # Sistema
-    Get-ComputerInfo |
-        Select-Object CsName, OsName, OsVersion, OsArchitecture, CsSystemType, CsManufacturer, CsModel |
-        Format-List
+    # Sistema (CIM direto — Get-ComputerInfo varre TUDO e leva segundos)
+    $osCim = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    $csCim = Get-CimInstance Win32_ComputerSystem  -ErrorAction SilentlyContinue
+    [pscustomobject]@{
+        CsName         = $csCim.Name
+        OsName         = $osCim.Caption
+        OsVersion      = $osCim.Version
+        OsArchitecture = $osCim.OSArchitecture
+        CsSystemType   = $csCim.SystemType
+        CsManufacturer = $csCim.Manufacturer
+        CsModel        = $csCim.Model
+    } | Format-List
 
     # Memória física
     Write-Host "`n--- MEMÓRIA FÍSICA ---" -ForegroundColor Cyan

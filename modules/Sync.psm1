@@ -478,6 +478,56 @@ function Comparar-EspacoVsOrigemV2 {
     }
 }
 
+# ───────────────────────── Nucleo PURO (Fase B) ─────────────────────────
+# Logica sem UI (sem Write-Host/Read-Host/Pause): parametrizavel e testavel.
+# Os presenters Start-Robocopy* abaixo consomem estas funcoes.
+
+function Get-RobocopyArgs {
+    <#
+      .SYNOPSIS  Monta a lista de argumentos do robocopy para os modos seguros V2.
+      .DESCRIPTION  Funcao PURA (sem I/O): mesma ordem/flags que os presenters usavam
+        inline, agora num so lugar. 'Unilateral' usa /E /XO + (/COPYALL|/COPY:DAT);
+        'Espelho' usa /MIR /COPYALL (destrutivo). -Simular adiciona /L (dry-run).
+      .OUTPUTS  string[]
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Origem,
+        [Parameter(Mandatory=$true)][string]$Destino,
+        [Parameter(Mandatory=$true)][ValidateSet('Unilateral','Espelho')][string]$Modo,
+        [Parameter(Mandatory=$true)][string]$LogPath,
+        [switch]$Simular,
+        [switch]$PreservarTudo
+    )
+    $comum = @('/R:1','/W:1','/XJ','/MT:8','/V','/TEE',"/LOG+:$LogPath",'/DCOPY:DAT')
+    if ($Modo -eq 'Espelho') {
+        $rcArgs = @($Origem, $Destino, '/MIR', '/COPYALL') + $comum
+    } else {
+        $copyFlag = if ($PreservarTudo) { '/COPYALL' } else { '/COPY:DAT' }
+        $rcArgs = @($Origem, $Destino, '/E', '/XO') + $comum + @($copyFlag)
+    }
+    if ($Simular) { $rcArgs += '/L' }
+    return ,$rcArgs
+}
+
+function Get-RobocopyStatus {
+    <#
+      .SYNOPSIS  Classifica o exit code do robocopy (era triplicado nos presenters).
+      .DESCRIPTION  Funcao PURA. Robocopy: >=8 erro grave; 1-7 houve copias; 0 nada a fazer.
+      .OUTPUTS  PSCustomObject { ExitCode, Severidade('Erro'|'Sucesso'|'SemMudancas'), Mensagem }
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][int]$ExitCode)
+    if ($ExitCode -ge 8) {
+        $sev = 'Erro';        $msg = "Robocopy terminou com erros (código $ExitCode)."
+    } elseif ($ExitCode -ge 1) {
+        $sev = 'Sucesso';     $msg = "Concluído com sucesso (houve cópias/atualizações)."
+    } else {
+        $sev = 'SemMudancas'; $msg = "Nada a copiar/alterar (já idêntico)."
+    }
+    [pscustomobject]@{ ExitCode = $ExitCode; Severidade = $sev; Mensagem = $msg }
+}
+
 function Start-RobocopyUnilateralSeguro {
     <#
       .SYNOPSIS  Cópia unilateral (Origem -> Destino) com flags seguras e /dry-run opcional.
@@ -509,31 +559,18 @@ function Start-RobocopyUnilateralSeguro {
 
     $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
 
-    # /COPYALL preserva ACL/owner/auditing (precisa admin); /COPY:DAT evita Owner/SACL.
-    $copyFlag = if ($PreservarTudo) { '/COPYALL' } else { '/COPY:DAT' }
-    $rcArgs = @(
-        $Origem, $Destino,
-        '/E',                # subpastas (inclui vazias)
-        '/XO',               # pula fonte mais antiga que destino
-        '/R:1','/W:1',       # 1 tentativa, espera 1s
-        '/XJ',               # ignora junctions
-        '/MT:8',             # threads
-        '/V','/TEE',
-        "/LOG+:$log",
-        '/DCOPY:DAT',        # dados/atributos/tempo em diretórios
-        $copyFlag
-        # opcional: '/FFT'   # tolerância FAT (se copiar para NAS não-Windows)
-    )
-    if ($Simular) { $rcArgs += '/L' }
+    # Argumentos via nucleo puro (Get-RobocopyArgs): /COPYALL preserva ACL/owner/auditing
+    # (precisa admin); /COPY:DAT evita Owner/SACL.
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo
 
     Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
     & robocopy @rcArgs
     $rc = $LASTEXITCODE
     Registrar-Log ("Robocopy unilateral {0} {1} -> {2} (rc={3}){4}" -f $copiaDesc, $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
 
-    if     ($rc -ge 8) { Write-Error   "Robocopy terminou com erros (código $rc). Veja o log: $log" }
-    elseif ($rc -ge 1) { Write-Host    "Concluído com sucesso (houve cópias/atualizações). Log: $log" -ForegroundColor Green }
-    else               { Write-Host    "Nada a copiar. Log: $log" -ForegroundColor Green }
+    $st = Get-RobocopyStatus -ExitCode $rc
+    if ($st.Severidade -eq 'Erro') { Write-Error ("{0} Veja o log: {1}" -f $st.Mensagem, $log) }
+    else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $log) -ForegroundColor Green }
 }
 
 function Simular-RobocopyUnilateral {
@@ -576,24 +613,16 @@ function Start-RobocopyEspelho {
     }
 
     $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
-    $rcArgs = @(
-        $Origem, $Destino,
-        '/MIR',              # espelha (inclui exclusao de extras no destino)
-        '/COPYALL',          # ACL/owner/auditing
-        '/R:1','/W:1','/XJ','/MT:8','/V','/TEE',
-        "/LOG+:$log",
-        '/DCOPY:DAT'
-    )
-    if ($Simular) { $rcArgs += '/L' }
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular
 
     Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
     & robocopy @rcArgs
     $rc = $LASTEXITCODE
     Registrar-Log ("Robocopy ESPELHO /MIR {0} -> {1} (rc={2}){3}" -f $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
 
-    if     ($rc -ge 8) { Write-Error "Robocopy terminou com erros (código $rc). Veja o log: $log" }
-    elseif ($rc -ge 1) { Write-Host  "Espelhamento concluído. Log: $log" -ForegroundColor Green }
-    else               { Write-Host  "Nada a alterar (já idêntico). Log: $log" -ForegroundColor Green }
+    $st = Get-RobocopyStatus -ExitCode $rc
+    if ($st.Severidade -eq 'Erro') { Write-Error ("{0} Veja o log: {1}" -f $st.Mensagem, $log) }
+    else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $log) -ForegroundColor Green }
 }
 
 function Iniciar-SincronizacaoV2 {
@@ -627,4 +656,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

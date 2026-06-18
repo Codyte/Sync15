@@ -25,7 +25,7 @@
 #   L1044  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
 #   L1079  Criar-App
 #   L1134  Executor
-#   L1156  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+#   L1195  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # ======================= END NAV INDEX =======================
 
 # ===================================================================

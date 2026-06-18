@@ -29,7 +29,7 @@
 
     FunctionsToExport = @(
         # Core
-        'Get-SyncMasterDataDir','Start-SyncMasterLog','Stop-SyncMasterLog','Pause-Script',
+        'Get-SyncMasterDataDir','Start-SyncMaster','Start-SyncMasterLog','Stop-SyncMasterLog','Pause-Script',
         'Confirm-Action','Registrar-Log','Visualizar-Logs','Ensure-Dir','Test-IsAdmin','Require-Admin',
         # Menu (data-driven, Fase C)
         'Get-MenuPrincipal','Show-MenuPrincipal',

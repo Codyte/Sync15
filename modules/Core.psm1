@@ -89,6 +89,21 @@ function Visualizar-Logs {
     }
 }
 
+# Abre o menu interativo do Sync Master a partir do modulo instalado. Acha o launcher
+# Sync_MasterV15.ps1 um nivel acima de modules\ (vale no repo e quando instalado como
+# modulo: Modules\SyncMaster\Sync_MasterV15.ps1 + Modules\SyncMaster\modules\Core.psm1).
+# Permite digitar 'Start-SyncMaster' de qualquer lugar apos a instalacao.
+function Start-SyncMaster {
+    # Sem [CmdletBinding()]: deixa $args capturar parametros extras p/ repassar ao launcher
+    # (ex.: Start-SyncMaster -Acao Sincronizar -Origem X -Destino Y).
+    $entry = Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_MasterV15.ps1'
+    if (-not (Test-Path $entry)) {
+        Write-Error "Launcher nao encontrado: $entry"
+        return
+    }
+    & $entry @args
+}
+
 # Garante que um diretorio exista (idempotente).
 function Ensure-Dir {
     param([string]$Path)
@@ -111,4 +126,4 @@ function Require-Admin {
     }
 }
 
-Export-ModuleMember -Function Get-SyncMasterDataDir, Start-SyncMasterLog, Stop-SyncMasterLog, Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin
+Export-ModuleMember -Function Get-SyncMasterDataDir, Start-SyncMaster, Start-SyncMasterLog, Stop-SyncMasterLog, Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin

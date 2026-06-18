@@ -1,0 +1,555 @@
+﻿<#
+    Sync.psm1 — engine de sincronizacao (robocopy) + diretorios salvos do Sync Master.
+    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
+    Estado dos diretorios salvos encapsulado aqui (diretorios.json na raiz do projeto).
+#>
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+
+$script:diretoriosConfigFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'diretorios.json'
+if (Test-Path $script:diretoriosConfigFile) {
+    try {
+        $script:diretoriosSalvos = Get-Content $script:diretoriosConfigFile -Raw | ConvertFrom-Json
+        if ($null -ne $script:diretoriosSalvos -and $script:diretoriosSalvos -isnot [array]) { $script:diretoriosSalvos = @($script:diretoriosSalvos) }
+    } catch {
+        Write-Warning "Arquivo de configuracao de diretorios corrompido."
+        $script:diretoriosSalvos = @()
+    }
+} else {
+    $script:diretoriosSalvos = @()
+}
+if ($null -eq $script:diretoriosSalvos) { $script:diretoriosSalvos = @() }
+function Salvar-Diretorios {
+    try {
+        $script:diretoriosSalvos | ConvertTo-Json -Depth 5 | Set-Content -Path $diretoriosConfigFile
+        return $true
+    } catch {
+        Write-Warning "ERRO: Não foi possível salvar o arquivo de configuração. $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Menu-GerenciamentoDiretorios {
+    do {
+        Clear-Host
+        Write-Host "--- GERENCIAMENTO DE DIRETÓRIOS SALVOS ---" -ForegroundColor Cyan
+        
+        if ($diretoriosSalvos.Count -eq 0) {
+            Write-Host "Nenhum diretório salvo." -ForegroundColor Yellow
+        } else {
+            for ($i = 0; $i -lt $diretoriosSalvos.Count; $i++) {
+                Write-Host ('{0,3}. {1,-25} -> {2}' -f ($i+1), $diretoriosSalvos[$i].Nome, $diretoriosSalvos[$i].Caminho)
+            }
+        }
+        
+        Write-Host "---------------------------------------------"
+        Write-Host "A - Adicionar novo diretório"
+        Write-Host "R - Remover um diretório"
+        Write-Host "Q - Voltar ao menu principal"
+        
+        $opcao = Read-Host "Sua escolha"
+        
+        switch ($opcao.ToUpper()) {
+            'A' {
+                $nome = Read-Host "Digite um nome/apelido para este diretório (ex: Servidor Principal)"
+                if ([string]::IsNullOrWhiteSpace($nome)) { Write-Warning "O nome não pode ser vazio."; Pause-Script; continue }
+                
+                $caminho = ObterCaminhoPasta -titulo "Selecione a pasta para '$nome'"
+                
+                if (-not $caminho) {
+                    Write-Host "Seleção de pasta cancelada ou falhou. Retornando ao menu." -ForegroundColor Yellow
+                    Pause-Script
+                    continue 
+                }
+
+                $novoDiretorio = [pscustomobject]@{
+                    Nome = $nome
+                    Caminho = $caminho
+                }
+                $script:diretoriosSalvos += $novoDiretorio
+                if (Salvar-Diretorios) { Write-Host "Diretório '$nome' salvo com sucesso!" -ForegroundColor Green }
+                Pause-Script
+            }
+            'R' {
+                if ($diretoriosSalvos.Count -eq 0) { Write-Warning "Não há diretórios para remover."; Pause-Script; continue }
+                $numStr = Read-Host "Digite o NÚMERO do diretório a ser removido"
+                if ($numStr -match '^\d+$' -and [int]$numStr -ge 1 -and [int]$numStr -le $diretoriosSalvos.Count) {
+                    $index = [int]$numStr - 1
+                    $nomeRemovido = $diretoriosSalvos[$index].Nome
+                    if (Confirm-Action "Tem certeza que deseja remover '$nomeRemovido'?") {
+                        $tempList = [System.Collections.Generic.List[object]]::new($diretoriosSalvos)
+                        $tempList.RemoveAt($index)
+                        $script:diretoriosSalvos = $tempList.ToArray()
+                        if (Salvar-Diretorios) { Write-Host "Diretório '$nomeRemovido' removido com sucesso!" -ForegroundColor Green }
+                    }
+                } else {
+                    Write-Warning "Número inválido."
+                }
+                Pause-Script
+            }
+            'Q' { return }
+            default { Write-Warning "Opção inválida."; Pause-Script }
+        }
+    } while ($true)
+}
+
+function Selecionar-DiretorioDaLista {
+    param([string]$Titulo = "Selecione um diretório")
+    
+    Clear-Host
+    Write-Host "--- $Titulo ---" -ForegroundColor Cyan
+    
+    if ($diretoriosSalvos.Count -eq 0) {
+        Write-Host "Nenhum diretório salvo na biblioteca. Indo para seleção manual." -ForegroundColor Yellow
+        Pause-Script
+        $caminhoManual = ObterCaminhoPasta -titulo "Seleção Manual para $Titulo"
+        if ($caminhoManual) {
+            return [pscustomobject]@{ Nome = "Manual"; Caminho = $caminhoManual }
+        }
+        return $null
+    }
+
+    for ($i = 0; $i -lt $diretoriosSalvos.Count; $i++) {
+        Write-Host ('{0,3}. {1}' -f ($i+1), $diretoriosSalvos[$i].Nome)
+    }
+    Write-Host "---------------------------------------------"
+    Write-Host "M - Selecionar um caminho diferente (Manual)"
+    Write-Host "C - Cancelar"
+    
+    $escolha = Read-Host "Escolha um diretório da lista ou uma opção"
+    
+    if ($escolha -match '^\d+$' -and [int]$escolha -ge 1 -and [int]$escolha -le $diretoriosSalvos.Count) {
+        $index = [int]$escolha - 1
+        return $diretoriosSalvos[$index]
+    } elseif ($escolha -match '^[Mm]$') {
+        $caminhoManual = ObterCaminhoPasta -titulo "Seleção Manual para $Titulo"
+        if ($caminhoManual) {
+            return [pscustomobject]@{ Nome = "Manual"; Caminho = $caminhoManual }
+        }
+    }
+    
+    return $null # Cancelado
+}
+
+function ObterCaminhoPasta {
+    param([string]$titulo = "Selecione uma pasta")
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+        $folderBrowser.Description = $titulo
+        $folderBrowser.ShowNewFolderButton = $true
+        if ($folderBrowser.ShowDialog() -eq "OK") { return $folderBrowser.SelectedPath } 
+        else { Write-Warning "Seleção de pasta cancelada."; return $null }
+    }
+    catch {
+        Write-Warning "Não foi possível carregar o seletor de pastas gráfico. Usando entrada manual."
+        do {
+            $caminho = Read-Host -Prompt "Digite o caminho completo para a pasta de '$titulo' (ou Enter para cancelar)"
+            if ([string]::IsNullOrWhiteSpace($caminho)) { return $null }
+            if (Test-Path -Path $caminho -PathType Container) { return $caminho }
+            Write-Warning "Caminho inválido ou não é um diretório. Tente novamente."
+        } while ($true)
+    }
+}
+
+function Iniciar-Sincronizacao {
+    Clear-Host
+    Write-Host "--- MÓDULO DE SINCRONIZAÇÃO DE ARQUIVOS ---" -ForegroundColor Cyan
+
+    $origemObj = Selecionar-DiretorioDaLista -Titulo "Selecione a ORIGEM da sincronização"
+    if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+
+    $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO da sincronização"
+    if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+
+    $origem = $origemObj.Caminho
+    $destino = $destinoObj.Caminho
+
+    $modoSincronizacao = ObterModoSincronizacao
+    if (-not $modoSincronizacao) { Write-Host "Operação cancelada pelo usuário."; Pause-Script; return }
+
+    Executar-Robocopy -Origem $origem -Destino $destino -ModoSincronizacao $modoSincronizacao
+}
+
+function Executar-Robocopy {
+     param([string]$Origem, [string]$Destino, [string]$ModoSincronizacao)
+    Write-Host "------------------------------------------------"
+    Write-Host "Origem:  $Origem" -ForegroundColor Green
+    Write-Host "Destino: $Destino" -ForegroundColor Green
+    Write-Host "Modo:    $ModoSincronizacao" -ForegroundColor Green
+    Write-Host "------------------------------------------------"
+    if ([string]::IsNullOrEmpty($Origem) -or [string]::IsNullOrEmpty($Destino)) { Write-Error "Pastas de origem ou destino não selecionadas. Encerrando."; Pause-Script; return }
+    if ((Convert-Path $Origem) -eq (Convert-Path $Destino)) { Write-Error "As pastas de origem e destino não podem ser iguais."; Pause-Script; return }
+    if (-not (VerificarEspacoEmDisco -caminho $Destino)) { Write-Host "Abortando devido a espaço em disco insuficiente ou cancelamento do usuário."; Pause-Script; return }
+    if (-not (Confirm-Action -Prompt "Confirma o início da sincronização?")) { Write-Host "Operação cancelada."; Pause-Script; return }
+    $logFile = Join-Path -Path $PSScriptRoot -ChildPath "sincronizacao_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+    Start-Transcript -Path $logFile -Append
+    try {
+        if ($ModoSincronizacao -eq "Unilateral") {
+            Write-Host "Iniciando cópia unilateral (Origem -> Destino)..."
+            robocopy "$Origem" "$Destino" /E /COPYALL /R:3 /W:5 /XJ /MT /V
+        } elseif ($ModoSincronizacao -eq "Bilateral") {
+            Write-Host "Iniciando sincronização bilateral (espelhamento)..."
+            Write-Host "Etapa 1: Sincronizando Origem -> Destino..."
+            robocopy "$Origem" "$Destino" /MIR /COPYALL /R:3 /W:5 /XJ /MT /V
+            Write-Host "Etapa 2: Sincronizando Destino -> Origem..."
+            robocopy "$Destino" "$Origem" /MIR /COPYALL /R:3 /W:5 /XJ /MT /V
+        }
+        if ($LASTEXITCODE -ge 8) { Write-Error "Processo de cópia encontrou erros graves. Verifique o log." }
+        elseif ($LASTEXITCODE -ge 1 -and $LASTEXITCODE -lt 8) { Write-Host "Sincronização concluída com sucesso (arquivos foram copiados)." -ForegroundColor Green }
+        else { Write-Host "Sincronização concluída. Nenhum arquivo precisou ser copiado." -ForegroundColor Green }
+    }
+    catch { Write-Error "Ocorreu um erro inesperado durante a cópia: $($_.Exception.Message)" }
+    finally { Write-Host "Log de operação detalhado salvo em: $logFile"; Stop-Transcript; Pause-Script }
+}
+
+function VerificarEspacoEmDisco {
+    param([string]$caminho)
+
+    try {
+        # --- DESTINO EM REDE (UNC) ---
+        if ($caminho -like "\\*") {
+            # \\servidor\compartilhamento\pasta\...
+            $partes = $caminho.TrimEnd('\').Split([System.IO.Path]::DirectorySeparatorChar, [System.StringSplitOptions]::RemoveEmptyEntries)
+            if ($partes.Count -lt 2) { throw "Caminho UNC inválido: $caminho" }
+
+            $servidor = $partes[0]
+            $compartilhamento = $partes[1]
+
+            # Abre sessão CIM no servidor (requer RPC/WMI liberado e permissão)
+            $sess = New-CimSession -ComputerName $servidor -ErrorAction Stop
+            try {
+                # 1) Descobre o caminho físico do compartilhamento (ex: D:\Shares\Softwares)
+                $share = Get-CimInstance -CimSession $sess -ClassName Win32_Share -Filter ("Name='{0}'" -f $compartilhamento) -ErrorAction Stop
+                if (-not $share -or [string]::IsNullOrWhiteSpace($share.Path)) {
+                    throw "Compartilhamento '$compartilhamento' não encontrado em $servidor."
+                }
+
+                # 2) Extrai a letra da unidade (DeviceID em Win32_LogicalDisk é 'D:' e NÃO 'D:\')
+                $root = [System.IO.Path]::GetPathRoot($share.Path) # ex: 'D:\'
+                $driveId = $root.Substring(0,2)                     # 'D:'
+
+                # 3) Consulta espaço livre do disco onde mora o compartilhamento
+                $disk = Get-CimInstance -CimSession $sess -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $driveId) -ErrorAction Stop
+                $freeSpace = [int64]$disk.FreeSpace
+            }
+            finally {
+                if ($sess) { Remove-CimSession -CimSession $sess -ErrorAction SilentlyContinue }
+            }
+        }
+        else {
+            # --- DESTINO LOCAL ---
+            $driveLetter = [System.IO.Path]::GetPathRoot($caminho).TrimEnd('\')
+            $driveInfo = Get-PSDrive -Name $driveLetter.Trim(":") -ErrorAction Stop
+            $freeSpace = [int64]$driveInfo.Free
+        }
+
+        if ($freeSpace -lt 1GB) {
+            Write-Warning ("Espaço em disco insuficiente no destino ({0:N2} MB livres)." -f ($freeSpace / 1MB))
+            return $false
+        }
+
+        Write-Host ("Espaço em disco suficiente no destino ({0:N2} GB livres)." -f ($freeSpace / 1GB)) -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Warning "Não foi possível validar o espaço em disco para '$caminho'. Detalhe: $($_.Exception.Message)"
+        # Permite seguir mediante confirmação, caso o ambiente bloqueie WMI/Firewall
+        return Confirm-Action -Prompt "Prosseguir SEM checar espaço em disco?"
+    }
+}
+
+function ObterModoSincronizacao {
+    param()
+    Write-Host "Escolha o modo de sincronização:"
+    Write-Host "1 - Sincronização Unilateral (Origem -> Destino)"
+    Write-Host "2 - Sincronização Bilateral (Espelhamento Mútuo)"
+    do {
+        $modo = Read-Host -Prompt "Digite o número correspondente ao modo desejado (ou 'C' para cancelar)"
+        switch ($modo) {
+            "1" { return "Unilateral" }
+            "2" { return "Bilateral" }
+            "C" { return $null }
+            default { Write-Warning "Opção inválida. Escolha '1', '2' ou 'C' para cancelar." }
+        }
+    } while ($true)
+}
+
+function Resolve-ShareToDiskInfoV2 {
+    <#
+      .SYNOPSIS  Resolve \\servidor\share para caminho físico e disco/volume.
+      .OUTPUTS   PSCustomObject { Server, Share, PhysicalPath, DriveId, VolumeName, FreeSpace }
+    #>
+    param([Parameter(Mandatory=$true)][string]$UncPath)
+
+    if ($UncPath -notlike "\\*") { throw "Caminho não é UNC: $UncPath" }
+
+    $parts = $UncPath.TrimEnd('\').Split([IO.Path]::DirectorySeparatorChar, [StringSplitOptions]::RemoveEmptyEntries)
+    if ($parts.Count -lt 2) { throw "UNC inválido: $UncPath" }
+    $server = $parts[0]; $shareName = $parts[1]
+
+    # Sessão CIM via DCOM (evita TrustedHosts/WinRM)
+    $sess = New-CimSession -ComputerName $server -SessionOption (New-CimSessionOption -Protocol Dcom) -ErrorAction Stop
+    try {
+        $share = Get-CimInstance -CimSession $sess -ClassName Win32_Share -Filter ("Name='{0}'" -f $shareName) -ErrorAction Stop
+        if (-not $share -or [string]::IsNullOrWhiteSpace($share.Path)) {
+            throw "Compartilhamento '$shareName' não encontrado em $server."
+        }
+
+        $physical = $share.Path # ex: D:\Dados\Softwares
+        $root     = [IO.Path]::GetPathRoot($physical)   # ex: D:\
+
+        # 1) tenta Win32_LogicalDisk (discos com letra)
+        $driveId = $null; $free = $null; $volName = $null
+        if ($root -and $root.Length -ge 2) {
+            $driveId = $root.Substring(0,2)             # D:
+            $disk = Get-CimInstance -CimSession $sess -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $driveId) -ErrorAction SilentlyContinue
+            if ($disk) { $free = [int64]$disk.FreeSpace }
+        }
+
+        # 2) fallback para Win32_Volume (montagens sem letra/pontos de montagem)
+        if (-not $free -or $free -le 0) {
+            $vols = Get-CimInstance -CimSession $sess -ClassName Win32_Volume -ErrorAction Stop
+            # Win32_Volume.Name termina com \ (ex: D:\  OU  C:\Mounts\Dados\)
+            $vol = $vols | Where-Object { $physical.StartsWith($_.Name, [StringComparison]::OrdinalIgnoreCase) } |
+                   Sort-Object { $_.Name.Length } -Descending | Select-Object -First 1
+            if ($vol) {
+                $free    = [int64]$vol.FreeSpace
+                $volName = $vol.Name
+                if (-not $driveId -and $vol.DriveLetter) { $driveId = $vol.DriveLetter }
+            }
+        }
+
+        [pscustomobject]@{
+            Server       = $server
+            Share        = $shareName
+            PhysicalPath = $physical
+            DriveId      = $driveId
+            VolumeName   = $volName
+            FreeSpace    = $free
+        }
+    }
+    finally {
+        if ($sess) { Remove-CimSession -CimSession $sess -ErrorAction SilentlyContinue }
+    }
+}
+
+function VerificarEspacoEmDiscoV2 {
+    <#
+      .SYNOPSIS  Verifica espaço livre para caminho local ou UNC (DCOM).
+      .PARAMETER caminho  Caminho local (C:\...) ou UNC (\\server\share\...)
+      .PARAMETER MinLivresGB  Limite mínimo em GB (default 1 GB)
+      .RETURNS   [bool]
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$caminho,
+        [double]$MinLivresGB = 1.0
+    )
+
+    try {
+        $free = $null
+
+        if ($caminho -like "\\*") {
+            $info = Resolve-ShareToDiskInfoV2 -UncPath $caminho
+            $free = [int64]$info.FreeSpace
+        } else {
+            $root = [IO.Path]::GetPathRoot($caminho).TrimEnd('\')
+            $drv  = Get-PSDrive -Name $root.Trim(':') -ErrorAction Stop
+            $free = [int64]$drv.Free
+        }
+
+        if (-not $free -or $free -le 0) {
+            Write-Warning "Não foi possível determinar o espaço livre para '$caminho'."
+            return $false
+        }
+
+        $gb = [Math]::Round($free/1GB,2)
+        if ($gb -lt $MinLivresGB) {
+            Write-Warning ("Espaço insuficiente no destino ({0:N2} GB livres; mínimo {1:N2} GB)." -f $gb, $MinLivresGB)
+            return $false
+        }
+
+        Write-Host ("Espaço disponível no destino: {0:N2} GB." -f $gb) -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Warning "Falha ao verificar espaço para '$caminho'. Detalhe: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-TamanhoPastaBytesV2 {
+    param([Parameter(Mandatory=$true)][string]$Path)
+    if (-not (Test-Path -Path $Path -PathType Container)) { throw "Pasta não encontrada: $Path" }
+    ($items = Get-ChildItem -Path $Path -Recurse -File -Force -ErrorAction SilentlyContinue) | Out-Null
+    return ($items | Measure-Object -Property Length -Sum).Sum
+}
+
+function Comparar-EspacoVsOrigemV2 {
+    <#
+      .SYNOPSIS  Compara tamanho da origem com espaço livre no destino.
+      .RETURNS   PSCustomObject { OrigemGB, LivresDestinoGB, MargemGB, PodeCopiar }
+    #>
+    param(
+        [Parameter(Mandatory=$true)][string]$Origem,
+        [Parameter(Mandatory=$true)][string]$Destino,
+        [double]$MargemSegurancaGB = 2.0
+    )
+
+    $tamBytes = Get-TamanhoPastaBytesV2 -Path $Origem
+    # reutiliza VerificarEspacoEmDiscoV2 para obter livres
+    $livres = $null
+    if ($Destino -like "\\*") {
+        $info   = Resolve-ShareToDiskInfoV2 -UncPath $Destino
+        $livres = [int64]$info.FreeSpace
+    } else {
+        $root = [IO.Path]::GetPathRoot($Destino).TrimEnd('\')
+        $drv  = Get-PSDrive -Name $root.Trim(':')
+        $livres = [int64]$drv.Free
+    }
+
+    $origemGB = [Math]::Round($tamBytes/1GB,2)
+    $livresGB = [Math]::Round($livres/1GB,2)
+    $margemGB = [Math]::Round($livresGB - $origemGB,2)
+    $ok = ($margemGB -ge $MargemSegurancaGB)
+
+    [pscustomobject]@{
+        OrigemGB        = $origemGB
+        LivresDestinoGB = $livresGB
+        MargemGB        = $margemGB
+        PodeCopiar      = $ok
+    }
+}
+
+function Start-RobocopyUnilateralSeguro {
+    <#
+      .SYNOPSIS  Cópia unilateral (Origem -> Destino) com flags seguras e /dry-run opcional.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Origem,
+        [Parameter(Mandatory=$true)][string]$Destino,
+        [switch]$Simular,          # adiciona /L (lista sem copiar)
+        [switch]$IgnorarEspaco,    # pula checagem de espaço
+        [double]$MinLivresGB = 1.0
+    )
+
+    Write-Host "------------------------------------------------" -ForegroundColor Cyan
+    Write-Host "Origem : $Origem"
+    Write-Host "Destino: $Destino"
+    Write-Host "Modo   : Unilateral (seguro) $(if($Simular){' - SIMULAÇÃO (/L)'}else{''})"
+    Write-Host "------------------------------------------------" -ForegroundColor Cyan
+
+    if (-not $IgnorarEspaco) {
+        $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
+        if (-not $ok) {
+            Write-Warning "Espaço não validado/suficiente. Use -IgnorarEspaco para prosseguir mesmo assim."
+            return
+        }
+    }
+
+    $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
+
+    $args = @(
+        $Origem, $Destino,
+        '/E',                # subpastas (inclui vazias)
+        '/XO',               # pula fonte mais antiga que destino
+        '/R:1','/W:1',       # 1 tentativa, espera 1s
+        '/XJ',               # ignora junctions
+        '/MT:8',             # threads
+        '/V','/TEE',
+        "/LOG+:$log",
+        '/DCOPY:DAT',        # dados/atributos/tempo em diretórios
+        '/COPY:DAT'          # dados/atributos/tempo em arquivos (evita Owner/SACL)
+        # opcional: '/FFT'   # tolerância FAT (se copiar para NAS não-Windows)
+    )
+    if ($Simular) { $args += '/L' }
+
+    Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
+    & robocopy @args
+    $rc = $LASTEXITCODE
+
+    if     ($rc -ge 8) { Write-Error   "Robocopy terminou com erros (código $rc). Veja o log: $log" }
+    elseif ($rc -ge 1) { Write-Host    "Concluído com sucesso (houve cópias/atualizações). Log: $log" -ForegroundColor Green }
+    else               { Write-Host    "Nada a copiar. Log: $log" -ForegroundColor Green }
+}
+
+function Simular-RobocopyUnilateral {
+    param([string]$Origem,[string]$Destino)
+    Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -Simular
+}
+
+function Executar-RobocopyUnilateral {
+    param([string]$Origem,[string]$Destino,[switch]$IgnorarEspaco)
+    Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -IgnorarEspaco:$IgnorarEspaco
+}
+
+function Iniciar-SincronizacaoV2 {
+    Clear-Host
+    Write-Host "--- MÓDULO DE SINCRONIZAÇÃO (V2 - Seguro) ---" -ForegroundColor Cyan
+
+    $origemObj  = Selecionar-DiretorioDaLista -Titulo "Selecione a ORIGEM (V2)"
+    if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+    $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO (V2)"
+    if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+
+    $origem  = $origemObj.Caminho
+    $destino = $destinoObj.Caminho
+
+    Write-Host ""
+    Write-Host "Escolha o que deseja fazer:" -ForegroundColor Cyan
+    Write-Host "  1) SIMULAR (dry-run) - não copia, só lista"
+    Write-Host "  2) COPIAR (unilateral segura)"
+    Write-Host "  3) ESTIMAR tamanho x espaço (relatório)"
+    Write-Host "  C) Cancelar"
+    $opt = Read-Host "Sua opção"
+
+    switch ($opt) {
+        '1' {
+            Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino -Simular
+        }
+        '2' {
+            Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino
+        }
+        '3' {
+            $cmp = Comparar-EspacoVsOrigemV2 -Origem $origem -Destino $destino
+            "`n--- RELATÓRIO ---"
+            "Origem........: {0:N2} GB" -f $cmp.OrigemGB
+            "Livre destino.: {0:N2} GB" -f $cmp.LivresDestinoGB
+            "Margem........: {0:N2} GB" -f $cmp.MargemGB
+            "Pode copiar?..: {0}" -f $( if ($cmp.PodeCopiar) { "SIM" } else { "NÃO" } )
+            Pause-Script
+        }
+        default {
+            Write-Host "Cancelado."
+            Pause-Script
+        }
+    }
+}
+
+function Agendar-TarefaSincronizacao {
+    Write-Host "--- AGENDAMENTO DE TAREFA DE SINCRONIZAÇÃO ---" -ForegroundColor Cyan
+    $hora = Read-Host "Digite a hora para agendar a sincronização diária (formato HH:mm, ex: 22:00)"
+    if ($hora -notmatch "^\d{2}:\d{2}$") { Write-Warning "Formato de hora inválido."; Pause-Script; return }
+    
+    $origemObj = Selecionar-DiretorioDaLista -Titulo "Selecione a ORIGEM da sincronização agendada"
+    if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+
+    $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO da sincronização agendada"
+    if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
+
+    $nomeTarefa = "SincronizacaoEngOrtiz_" + (Get-Date -Format "yyyyMMdd")
+    $trigger = New-ScheduledTaskTrigger -Daily -At $hora
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`" -Acao Sincronizar -Origem `"$($origemObj.Caminho)`" -Destino `"$($destinoObj.Caminho)`""
+    
+    try {
+        Register-ScheduledTask -TaskName $nomeTarefa -Trigger $trigger -Action $action -Principal $principal -Description "Sincronização automática configurada pela Ferramenta de Engenharia." -Force
+        Write-Host "Tarefa '$nomeTarefa' agendada com sucesso para executar diariamente às $hora!" -ForegroundColor Green
+        Registrar-Log "Tarefa agendada: $nomeTarefa"
+    } catch {
+        Write-Warning "Falha ao agendar a tarefa. Erro: $($_.Exception.Message)"
+    }
+    Pause-Script
+}
+
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Start-RobocopyUnilateralSeguro, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

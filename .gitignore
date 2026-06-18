@@ -1,0 +1,18 @@
+# Caches (disposable, local)
+.navindex-cache.json
+.navi-cache.json
+
+# Runtime logs
+Logs/
+*.log
+
+# PS2EXE build output
+*.exe
+
+# Artefatos gerados (regeneraveis a partir do script-fonte)
+graphify-out/
+SyncMaster-Flow/
+SyncMaster-FunctionAudit/
+
+# Atalhos binarios (gerados por Create-*Shortcut.ps1)
+*.lnk

@@ -1,0 +1,219 @@
+﻿<#
+    Hardware.psm1 — monitoramento e diagnostico de hardware.
+    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
+#>
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+
+function Get-CpuRapido {
+    try {
+        # PercentProcessorTime já é calculado pelo sistema e atualiza ~1x/s
+        $cim = Get-CimInstance -ClassName Win32_PerfFormattedData_PerfOS_Processor -ErrorAction Stop |
+               Where-Object { $_.Name -eq '_Total' }
+        if ($cim) { return [math]::Round([double]$cim.PercentProcessorTime, 1) }
+    } catch {  Write-Verbose $_.Exception.Message }
+    return $null
+}
+
+function Get-MemUsoMB {
+    $os = Get-CimInstance -ClassName Win32_OperatingSystem
+    $total = [double]$os.TotalVisibleMemorySize
+    $livre = [double]$os.FreePhysicalMemory
+    [pscustomobject]@{
+        UsadoMB = [math]::Round((($total - $livre) * 1024) / 1MB, 1)
+        TotalMB = [math]::Round(($total * 1024) / 1MB, 1)
+    }
+}
+
+function Get-DiscosInfo {
+    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" |
+        ForEach-Object {
+            $total = [double]($_.Size); $livre = [double]($_.FreeSpace); $usado = $total - $livre
+            [pscustomobject]@{
+                Name        = $_.DeviceID
+                'Used (GB)' = [math]::Round($usado / 1GB, 2)
+                'Free (GB)' = [math]::Round($livre / 1GB, 2)
+                'Total (GB)'= [math]::Round($total / 1GB, 2)
+                '% Used'    = if ($total -gt 0) { [math]::Round(($usado / $total) * 100, 1) } else { 0 }
+            }
+        } | Sort-Object Name
+}
+
+function Monitorar-Recursos {
+    param(
+        [int]$IntervaloMs = 100,        # 4x por segundo (ajuste p/ 100–500ms conforme a carga)
+        [int]$CiclosDisco = 50          # atualiza os discos a cada N ciclos (para não pesar)
+    )
+
+    $ciclo = 0
+    $discosCache = Get-DiscosInfo
+
+    $largura = [Console]::WindowWidth
+    Clear-Host
+    Write-Host ("--- MONITORAMENTO EM TEMPO REAL (Ctrl+C para sair) ---").PadRight($largura)
+
+    # Pré-aloca linhas fixas para reescrever no mesmo lugar
+    Write-Host ("CPU: ---% | RAM: ----/---- MB").PadRight($largura)
+    Write-Host ("Discos: (atualiza a cada $CiclosDisco ciclos)").PadRight($largura)
+    Write-Host ("").PadRight($largura)  # linha separadora
+
+    while ($true) {
+        try {
+            $cpu = Get-CpuRapido
+            if ($null -eq $cpu) { $cpu = 0 }
+
+            $mem = Get-MemUsoMB
+
+            # Atualiza discos com menos frequência
+            if ($ciclo % $CiclosDisco -eq 0) {
+                $discosCache = Get-DiscosInfo
+            }
+
+            # Monta uma linha compacta de discos
+            $discosStr = ($discosCache | ForEach-Object {
+                "{0}: {1}/{2} GB ({3}%)" -f $_.Name, $_.'Used (GB)', $_.'Total (GB)', $_.'% Used'
+            }) -join " | "
+
+            # Reposiciona o cursor e reescreve sem Clear-Host
+            [Console]::SetCursorPosition(0,1)
+            Write-Host ("CPU: {0:N1} % | RAM: {1:N1} / {2:N1} MB".PadRight($largura) -f $cpu, $mem.UsadoMB, $mem.TotalMB)
+            [Console]::SetCursorPosition(0,2)
+            Write-Host ("Discos: ".PadRight($largura))
+            [Console]::SetCursorPosition(0,3)
+            Write-Host ($discosStr.PadRight($largura))
+
+            $ciclo++
+            Start-Sleep -Milliseconds $IntervaloMs
+        } catch {
+            [Console]::SetCursorPosition(0,1)
+            Write-Host ("[WARN] Erro ao coletar dados... tentando novamente.".PadRight($largura))
+            Start-Sleep -Milliseconds ([Math]::Min(5000, $IntervaloMs + 500))
+        }
+    }
+}
+
+function Diagnostico-Hardware {
+    Clear-Host
+    Write-Host "--- DIAGNÓSTICO DE HARDWARE E SISTEMA ---" -ForegroundColor Cyan
+
+    # Sistema
+    Get-ComputerInfo |
+        Select-Object CsName, OsName, OsVersion, OsArchitecture, CsSystemType, CsManufacturer, CsModel |
+        Format-List
+
+    # Memória física
+    Write-Host "`n--- MEMÓRIA FÍSICA ---" -ForegroundColor Cyan
+    Get-CimInstance -ClassName Win32_PhysicalMemory |
+        Select-Object Manufacturer, Speed,
+            @{Name="Capacidade (GB)"; Expression = { [math]::Round(($_.Capacity/1GB), 2) }} |
+        Format-Table -AutoSize
+
+    # Unidades de disco (volumes/letras)
+    Write-Host "`n--- UNIDADES DE DISCO ---" -ForegroundColor Cyan
+    Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" |
+        Select-Object @{N='Name';E={$_.DeviceID}},
+                      @{N='Total (GB)';E={ [math]::Round(($_.Size/1GB),2) }},
+                      @{N='Usado (GB)';E={ [math]::Round((($_.Size - $_.FreeSpace)/1GB),2) }},
+                      @{N='Livre (GB)';E={ [math]::Round(($_.FreeSpace/1GB),2) }} |
+        Sort-Object Name |
+        Format-Table -AutoSize
+
+    # Discos físicos (compatível PS7). Enriquecido com MediaType/BusType quando possível.
+    Write-Host "`n--- DISCOS FÍSICOS ---" -ForegroundColor Cyan
+    $fisicosBase = Get-CimInstance -ClassName Win32_DiskDrive |
+        Select-Object DeviceID, Model, InterfaceType,
+                      @{N='Tamanho (GB)';E={ [math]::Round(($_.Size/1GB),2) }},
+                      SerialNumber, FirmwareRevision
+
+    $temStorage = Get-Command Get-PhysicalDisk -ErrorAction SilentlyContinue
+    if ($temStorage) {
+        $pd = Get-PhysicalDisk | Select-Object FriendlyName, SerialNumber, MediaType, BusType
+        $saida =
+            foreach ($d in $fisicosBase) {
+                $match = $pd | Where-Object {
+                    ($_.SerialNumber -and $_.SerialNumber -eq $d.SerialNumber) -or
+                    ($_.FriendlyName -and $d.Model -and $d.Model -like "*$($_.FriendlyName)*")
+                } | Select-Object -First 1
+
+                [pscustomobject]@{
+                    Model        = $d.Model
+                    Interface    = if ($match) { $match.BusType } else { $d.InterfaceType }
+                    'MediaType'  = if ($match) { $match.MediaType } else { $null }   # SSD/HDD (quando disponível)
+                    'Tamanho (GB)' = $d.'Tamanho (GB)'
+                    SerialNumber = $d.SerialNumber
+                    Firmware     = $d.FirmwareRevision
+                }
+            }
+        $saida | Format-Table -AutoSize
+    }
+    else {
+        $fisicosBase |
+            Select-Object Model, InterfaceType,
+                          'Tamanho (GB)', SerialNumber, FirmwareRevision |
+            Format-Table -AutoSize
+    }
+
+# --- MAPA DISCO → PARTIÇÃO → VOLUME ---
+Write-Host "`n--- MAPA DISCO → PARTIÇÃO → VOLUME ---" -ForegroundColor Cyan
+try {
+    $drives = Get-CimInstance Win32_DiskDrive
+
+    # Materializa a saída numa coleção; nada de pipe logo após "}".
+    $map = foreach ($d in $drives) {
+        $parts = Get-CimAssociatedInstance -InputObject $d -ResultClassName Win32_DiskPartition -ErrorAction SilentlyContinue
+        foreach ($p in $parts) {
+            $vols = Get-CimAssociatedInstance -InputObject $p -ResultClassName Win32_LogicalDisk -ErrorAction SilentlyContinue
+            foreach ($v in $vols) {
+                [pscustomobject]@{
+                    'Disco (Model)' = $d.Model
+                    'Partição'      = $p.DeviceID
+                    'Volume'        = $v.DeviceID
+                    'Tamanho (GB)'  = [math]::Round(($v.Size/1GB),2)
+                }
+            }
+        }
+    }
+
+    $map | Sort-Object 'Disco (Model)', 'Partição', 'Volume' | Format-Table -AutoSize
+}
+catch {
+    Write-Warning "Não foi possível gerar o mapa de volumes: $($_.Exception.Message)"
+}
+
+    Pause-Script
+}
+
+function Get-CpuUsageRobusto {
+    # 1) Tenta vários contadores
+    $candidatos = @(
+        '\Processor(_Total)\% Processor Time',
+        '\Processor Information(_Total)\% Processor Time',
+        '\Processor(_Total)\% Privileged Time',
+        '\Processor Information(_Total)\% Privileged Time'
+    )
+    foreach ($ctr in $candidatos) {
+        try {
+            $cs = (Get-Counter -Counter $ctr -SampleInterval 1 -MaxSamples 1 -ErrorAction Stop).CounterSamples
+            if ($cs -and $null -ne $cs.CookedValue) { return [math]::Round([double]$cs.CookedValue, 1) }
+        } catch {  Write-Verbose $_.Exception.Message }
+    }
+
+    # 2) Fallback por WMI/CIM formatado
+    try {
+        $cim = Get-CimInstance -ClassName Win32_PerfFormattedData_PerfOS_Processor -ErrorAction Stop |
+               Where-Object { $_.Name -eq '_Total' }
+        if ($cim -and $null -ne $cim.PercentProcessorTime) {
+            return [math]::Round([double]$cim.PercentProcessorTime, 1)
+        }
+    } catch {  Write-Verbose $_.Exception.Message }
+
+    # 3) Último fallback: média de LoadPercentage
+    try {
+        $wmi = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop
+        $media = ($wmi | Measure-Object -Property LoadPercentage -Average).Average
+        if ($null -ne $media) { return [math]::Round([double]$media, 1) }
+    } catch {  Write-Verbose $_.Exception.Message }
+
+    return $null
+}
+
+Export-ModuleMember -Function Get-CpuRapido, Get-MemUsoMB, Get-DiscosInfo, Monitorar-Recursos, Diagnostico-Hardware, Get-CpuUsageRobusto

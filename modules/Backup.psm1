@@ -4,18 +4,84 @@
 #>
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
 
+# ───────────────────────── Nucleo (Fase B) ─────────────────────────
+# Logica sem UI (sem Write-Host/Read-Host/Pause/Out-GridView). Get-ZipBackupPath e' pura;
+# Invoke-Zip* fazem I/O mas retornam objeto-resultado (Sucesso/Mensagem) e nao prompts.
+# Os presenters Criar-/Restaurar-BackupZIP consomem estas funcoes.
+
+function Get-ZipBackupPath {
+    <#
+      .SYNOPSIS  Monta o caminho do .zip de backup. Funcao PURA (sem I/O).
+      .DESCRIPTION  Padrao: Backup_{nome-da-pasta}_{yyyyMMdd_HHmmss}.zip dentro de DestinoDir.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$OrigemPath,
+        [Parameter(Mandatory=$true)][string]$DestinoDir,
+        [datetime]$Timestamp = (Get-Date)
+    )
+    $nome = "Backup_{0}_{1}.zip" -f (Split-Path $OrigemPath -Leaf), $Timestamp.ToString('yyyyMMdd_HHmmss')
+    return (Join-Path -Path $DestinoDir -ChildPath $nome)
+}
+
+function Invoke-ZipBackup {
+    <#
+      .SYNOPSIS  Compacta OrigemDir em DestinoZip. Sem UI; devolve objeto-resultado.
+      .OUTPUTS   PSCustomObject { Sucesso, Caminho, Mensagem }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$OrigemDir,
+        [Parameter(Mandatory=$true)][string]$DestinoZip
+    )
+    try {
+        if (-not (Test-Path -LiteralPath $OrigemDir -PathType Container)) { throw "Pasta de origem nao encontrada: $OrigemDir" }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::CreateFromDirectory($OrigemDir, $DestinoZip)
+        return [pscustomobject]@{ Sucesso = $true;  Caminho = $DestinoZip; Mensagem = "Backup ZIP criado: $DestinoZip" }
+    } catch {
+        return [pscustomobject]@{ Sucesso = $false; Caminho = $DestinoZip; Mensagem = $_.Exception.Message }
+    }
+}
+
+function Invoke-ZipRestore {
+    <#
+      .SYNOPSIS  Extrai ZipPath em DestinoDir. Sem UI; devolve objeto-resultado.
+      .DESCRIPTION  -Sobrescrever usa o overload overwrite (so PS7/.NET Core); em PS5 ou sem
+        o switch cai no extract padrao (lanca se arquivo ja existe).
+      .OUTPUTS   PSCustomObject { Sucesso, Destino, Mensagem }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$ZipPath,
+        [Parameter(Mandatory=$true)][string]$DestinoDir,
+        [switch]$Sobrescrever
+    )
+    try {
+        if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) { throw "Arquivo ZIP nao encontrado: $ZipPath" }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        if ($Sobrescrever -and $PSVersionTable.PSVersion.Major -ge 7) {
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $DestinoDir, $true)
+        } else {
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $DestinoDir)
+        }
+        return [pscustomobject]@{ Sucesso = $true;  Destino = $DestinoDir; Mensagem = "Restaurado para: $DestinoDir" }
+    } catch {
+        return [pscustomobject]@{ Sucesso = $false; Destino = $DestinoDir; Mensagem = $_.Exception.Message }
+    }
+}
+
 function Criar-BackupZIP {
     $origemObj = Selecionar-DiretorioDaLista -Titulo "Selecione a pasta para BACKUP (ZIP)"
     if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
     $origem = $origemObj.Caminho
-    $destinoZIP = Join-Path -Path $PSScriptRoot -ChildPath ("Backup_" + (Split-Path $origem -Leaf) + "_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".zip")
-    try {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($origem, $destinoZIP)
-        Write-Host "Backup ZIP criado com sucesso: $destinoZIP" -ForegroundColor Green
+    $destinoZIP = Get-ZipBackupPath -OrigemPath $origem -DestinoDir $PSScriptRoot
+    $res = Invoke-ZipBackup -OrigemDir $origem -DestinoZip $destinoZIP
+    if ($res.Sucesso) {
+        Write-Host "Backup ZIP criado com sucesso: $($res.Caminho)" -ForegroundColor Green
         Registrar-Log "Backup ZIP de $origem para $destinoZIP"
-    } catch {
-        Write-Warning "Erro ao criar o backup ZIP: $($_.Exception.Message)"
+    } else {
+        Write-Warning "Erro ao criar o backup ZIP: $($res.Mensagem)"
     }
     Pause-Script
 }
@@ -26,20 +92,13 @@ function Restaurar-BackupZIP {
     $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO para RESTAURAR backup ZIP"
     if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
     $destino = $destinoObj.Caminho
-    try {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        # PS7 (.NET Core) tem o overload (origem, destino, overwriteFiles): sem ele
-        # ExtractToDirectory lanca se algum arquivo ja existe no destino. PS5 (.NET
-        # Framework) nao tem o overload, entao cai no de 2 args (comportamento antigo).
-        if ($PSVersionTable.PSVersion.Major -ge 7) {
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $destino, $true)
-        } else {
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $destino)
-        }
+    # -Sobrescrever preserva o comportamento atual (overwrite no PS7); o nucleo cuida do fallback PS5.
+    $res = Invoke-ZipRestore -ZipPath $zip.FullName -DestinoDir $destino -Sobrescrever
+    if ($res.Sucesso) {
         Write-Host "Backup ZIP restaurado com sucesso para: $destino" -ForegroundColor Green
         Registrar-Log "Restaurado ZIP $($zip.FullName) para $destino"
-    } catch {
-        Write-Warning "Erro ao restaurar ZIP: $($_.Exception.Message)"
+    } else {
+        Write-Warning "Erro ao restaurar ZIP: $($res.Mensagem)"
     }
     Pause-Script
 }
@@ -70,4 +129,4 @@ function Clonar-Disco {
     Pause-Script
 }
 
-Export-ModuleMember -Function Criar-BackupZIP, Restaurar-BackupZIP, Clonar-Disco
+Export-ModuleMember -Function Get-ZipBackupPath, Invoke-ZipBackup, Invoke-ZipRestore, Criar-BackupZIP, Restaurar-BackupZIP, Clonar-Disco

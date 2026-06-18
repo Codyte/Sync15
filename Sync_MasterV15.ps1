@@ -1,31 +1,32 @@
 ﻿# ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L39    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
-#   L56    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
-#   L60    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
-#   L124   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
-#   L210   Menu-Otimizacao
-#   L244   Criar-PontoRestauracao
-#   L316   Restaurar-PontoRestauracao
-#   L452   Menu-LimpezaDisco
-#   L480   Configurar-ServicoDefrag
-#   L580   Utilitários robustos ===============================================
-#   L601   Menu-ReparoSistema
-#   L630   Get-PowerPlans
-#   L651   Criar-PlanoDeEnergia
-#   L667   Menu-CriarPlanoEnergia
-#   L688   Mostrar-EstadoOtimizacao
-#   L702   Menu-OtimizacaoAvancada
-#   L789   Menu-Desempenho
-#   L854   Menu-GerenciarAgentes
-#   L892   Gerenciar-ServicoDeAgente
-#   L942   Menu-Ferramentas
-#   L968   Menu-Avancado
-#   L1006  Gerenciar-EstadosOciososProcessador
-#   L1044  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
-#   L1079  Criar-App
-#   L1134  Executor
-#   L1195  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+#   L40    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
+#   L57    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
+#   L61    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
+#   L125   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
+#   L211   Menu-Otimizacao
+#   L245   Criar-PontoRestauracao
+#   L332   Restaurar-PontoRestauracao
+#   L468   Menu-LimpezaDisco
+#   L496   Configurar-ServicoDefrag
+#   L596   Utilitários robustos ===============================================
+#   L617   Menu-ReparoSistema
+#   L646   Get-PowerPlans
+#   L667   Criar-PlanoDeEnergia
+#   L683   Menu-CriarPlanoEnergia
+#   L704   Mostrar-EstadoOtimizacao
+#   L718   Menu-OtimizacaoAvancada
+#   L805   Menu-Desempenho
+#   L870   Menu-GerenciarAgentes
+#   L908   Gerenciar-ServicoDeAgente
+#   L958   Menu-Ferramentas
+#   L984   Menu-Avancado
+#   L1023  Gerenciar-EstadosOciososProcessador
+#   L1063  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
+#   L1098  Criar-App
+#   L1153  Executor
+#   L1226  Aliases de verbo aprovado (retrocompat v15) ---
+#   L1236  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # ======================= END NAV INDEX =======================
 
 # ===================================================================
@@ -242,8 +243,23 @@ function Menu-Otimizacao {
 }
 
 function Criar-PontoRestauracao {
+<#
+.SYNOPSIS
+    Cria um Ponto de Restauracao do Sistema (System Restore) no drive C:.
+.DESCRIPTION
+    Habilita a protecao do sistema se preciso, remove o throttle de frequencia
+    temporariamente e cria o ponto via CIM (classe SystemRestore). Restaura a
+    configuracao de frequencia ao final. Exige Administrador.
+.PARAMETER Descricao
+    Texto que identifica o ponto na lista do System Restore.
+.PARAMETER Tipo
+    Tipo do ponto (APPLICATION_INSTALL/UNINSTALL, DEVICE_DRIVER_INSTALL, MODIFY_SETTINGS).
+    Aceita sinonimos, case-insensitive; default MODIFY_SETTINGS.
+.EXAMPLE
+    Criar-PontoRestauracao -Descricao "Antes de otimizar"
+#>
      param(
-        [string]$Descricao = "Backup_Ferramenta_Engenharia_v10.0",
+        [string]$Descricao = "Sync_Master_v15",
         [string]$Tipo = 'MODIFY_SETTINGS'   # aceita sinônimos, case-insensitive
     )
 
@@ -992,6 +1008,7 @@ function Menu-Avancado {
                     $bcd_cmd = Read-Host "Digite o comando bcdedit COMPLETO a ser executado (ex: /set useplatformclock true)"
                     if ([string]::IsNullOrWhiteSpace($bcd_cmd)) { Write-Warning "Nenhum comando inserido." }
                     elseif(Confirm-Action -Prompt "Executar 'bcdedit $bcd_cmd'?"){
+                        Registrar-Log "bcdedit $bcd_cmd (executado pelo usuario)"
                         Start-Process "bcdedit" -ArgumentList $bcd_cmd -Wait -Verb RunAs
                     }
                 }
@@ -1016,6 +1033,7 @@ function Gerenciar-EstadosOciososProcessador {
             if (Confirm-Action "HABILITAR estados ociosos (IDLEDISABLE = 0)?") {
                 Powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR IDLEDISABLE 0
                 Powercfg /SETACTIVE SCHEME_CURRENT
+                Registrar-Log "Estados ociosos do processador HABILITADOS (IDLEDISABLE=0)"
                 Write-Host "Estados ociosos HABILITADOS." -ForegroundColor Green
             }
         }
@@ -1024,6 +1042,7 @@ function Gerenciar-EstadosOciososProcessador {
                  if (Confirm-Action -Prompt "CONFIRMAÇÃO FINAL: Continuar?") {
                     Powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR IDLEDISABLE 1
                     Powercfg /SETACTIVE SCHEME_CURRENT
+                    Registrar-Log "Estados ociosos do processador DESABILITADOS (IDLEDISABLE=1) - RISCO termico"
                     Write-Host "Estados ociosos DESABILITADOS." -ForegroundColor Red
                  }
             }
@@ -1132,6 +1151,20 @@ function Criar-App {
 # TODAS as funções e a lógica do bloco "Coop" e "Executor" estão contidas aqui.
 # A função 'Executor' serve como o ponto de entrada para toda a interface gráfica.
 function Executor {
+<#
+.SYNOPSIS
+    Baixa e executa o WinUtil (Chris Titus Tech) com verificacao de integridade.
+.DESCRIPTION
+    Em vez de baixar-e-executar as cegas, baixa o script para uma string, calcula e
+    exibe o SHA256, e (se informado) compara com um hash esperado, abortando se nao bater.
+.PARAMETER Url
+    URL do WinUtil. Default https://christitus.com/win.
+.PARAMETER ExpectedSha256
+    Hash SHA256 esperado (pin opcional). Tambem pode vir de env WINUTIL_EXPECTED_SHA256.
+    Se fornecido e nao corresponder, a execucao e abortada.
+.EXAMPLE
+    Executor -ExpectedSha256 'abc123...'   # so executa se o conteudo casar com o hash
+#>
     # WinUtil (Chris Titus Tech) e carregado remoto via irm. Antes era um embed
     # de ~16k linhas (v25.06.27); ver historico git para aquela versao pinada.
     #
@@ -1190,17 +1223,22 @@ function Executor {
 }
 
 
+# --- Aliases de verbo aprovado (retrocompat v15) ---
+# As funcoes seguem com nome PT (o lint do projeto ignora PSUseApprovedVerbs de proposito);
+# estes aliases so melhoram a descoberta no console (Get-Command New-*, Show-*, Restore-*).
+Set-Alias -Name Restore-PontoRestauracao -Value Restaurar-PontoRestauracao -Force
+Set-Alias -Name New-PontoRestauracao     -Value Criar-PontoRestauracao      -Force
+Set-Alias -Name New-PlanoDeEnergia        -Value Criar-PlanoDeEnergia         -Force
+Set-Alias -Name Show-EstadoOtimizacao     -Value Mostrar-EstadoOtimizacao     -Force
+Set-Alias -Name New-App                   -Value Criar-App                    -Force
 
 
 # --- PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # O script realmente começa a "fazer" algo a partir daqui.
 
-# 3.1: Verificação de Privilégios (ESSENCIAL)
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Warning "ERRO: Este script precisa ser executado com privilégios de Administrador."
-    Read-Host "Pressione Enter para fechar."
-    exit
-}
+# 3.1: Privilégios — checado por AÇÃO (v15). O modo automatizado '-Acao Sincronizar'
+# (robocopy) NÃO exige admin; antes um exit global aqui quebrava a Tarefa Agendada
+# rodando como usuário comum. O gate de admin agora fica dentro do menu interativo.
 
 # 3.2: PowerShell 7 indisponível (o relançamento, quando o pwsh.exe EXISTE, já
 # acontece em PARTE 1.1 no topo do script). Se ainda estamos em PS 5.x aqui, é
@@ -1238,8 +1276,14 @@ switch ($Acao.ToUpper()) {
         }
         Executar-Robocopy -Origem $Origem -Destino $Destino -ModoSincronizacao $Modo
     }
-    
+
     'MENU' {
+        # Gate de admin: só o menu interativo exige elevação (faz reg/serviços/powercfg).
+        if (-not (Test-IsAdmin)) {
+            Write-Warning "ERRO: O menu interativo precisa ser executado como Administrador."
+            Read-Host "Pressione Enter para fechar."
+            exit
+        }
         do {
             Clear-Host
             Write-Host "======================================================" -ForegroundColor DarkGray

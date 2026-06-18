@@ -12,11 +12,20 @@ function Pause-Local { Pause-Script }
     
     
     function Is-ServerOS {
-        try { ((Get-ComputerInfo -ErrorAction Stop).OsName -match 'Server') } catch { $false }
+        # Win32_OperatingSystem.ProductType: 1=Workstation, 2=Domain Controller, 3=Server.
+        # Via CIM é instantâneo; Get-ComputerInfo (versão antiga) levava segundos.
+        try { ([int](Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).ProductType) -ne 1 }
+        catch { $false }
     }
     function Set-DWord($Path,$Name,$Value){
+        # Auto-backup do Registro UMA vez por sessão antes da 1ª escrita destrutiva (v15).
+        if (-not $script:RegBackupDone) {
+            try { Backup-Registro; $script:RegBackupDone = $true }
+            catch { Write-Warning "Backup automático do Registro falhou: $($_.Exception.Message)" }
+        }
         New-Item -Path $Path -Force | Out-Null
         New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType DWord -Force | Out-Null
+        Registrar-Log ("Set-DWord {0}\{1} = {2}" -f $Path, $Name, $Value)
     }
     function Backup-Registro {
         Require-Admin
@@ -29,6 +38,7 @@ function Pause-Local { Pause-Script }
         reg export "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "$dir\DataCollection.reg" /y | Out-Null
         reg export "HKCU\Control Panel\Desktop" "$dir\Desktop.reg" /y | Out-Null
         Write-Host ("Backup salvo em: {0}" -f $dir) -ForegroundColor Cyan
+        Registrar-Log ("Backup-Registro -> {0}" -f $dir)
     }
     function Show-Estado {
         $mmPath   = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
@@ -72,6 +82,7 @@ function Pause-Local { Pause-Script }
         } catch {
             Write-Warning ("DISM falhou: {0}" -f $_.Exception.Message)
         }
+        Registrar-Log "Clean-Temp executado (TEMP + Component Store)"
     }
 
 # ===== STARTUPS (com seleção por números) =================================
@@ -93,6 +104,16 @@ foreach ($d in @($script:StartupFolderBackup,$script:StartupBackupUser,$script:S
 
 
 function Get-Startups {
+<#
+.SYNOPSIS
+    Lista todos os itens de inicializacao (Registro Run + pastas Startup), ativos e desativados.
+.DESCRIPTION
+    Varre HKCU/HKLM Run e as pastas Startup (User/Common), mais os backups dos que foram
+    desativados por este tool, retornando objetos com SourceType, Scope, Enabled, Name, Command.
+    Itens desativados ficam no backup (Registro _DisabledRun_Backup ou pasta Startup_Disabled).
+.OUTPUTS
+    PSCustomObject[] — um por item, ON antes de OFF, ordenado por nome.
+#>
     $items = @()
 
     # 1) Registro ON (HKCU/HKLM Run)
@@ -181,6 +202,19 @@ function Get-Startups {
 
 # Parser de seleção: "1 2 5-7,10" (compatível PS 5/7)
 function Parse-Selection {
+<#
+.SYNOPSIS
+    Converte uma string de selecao ("1 3 5-7,10") em uma lista de inteiros unica e ordenada.
+.DESCRIPTION
+    Aceita numeros soltos e intervalos a-b, separados por espaco, virgula ou ponto-e-virgula.
+    Deduplica, ordena e descarta tudo fora de [1..Max] e intervalos invertidos.
+.PARAMETER Selection
+    Texto digitado pelo usuario (ex.: "1 3 5-7,10").
+.PARAMETER Max
+    Maior indice valido (limite superior do intervalo aceito).
+.EXAMPLE
+    Parse-Selection -Selection '1 3 5-7' -Max 10   # => 1,3,5,6,7
+#>
     param(
         [string]$Selection,
         [int]$Max
@@ -211,6 +245,7 @@ function Parse-Selection {
 function Disable-StartupByNumber {
     param([int[]]$Indexes)
     Require-Admin
+    Registrar-Log ("Disable-StartupByNumber: indices " + ($Indexes -join ','))
     $list = Get-Startups
     $i=0; $map=@{}
     foreach ($it in $list) { $i++; $map[$i] = $it }
@@ -286,6 +321,7 @@ function Disable-StartupByNumber {
 function Enable-StartupByNumber {
     param([int[]]$Indexes)
     Require-Admin
+    Registrar-Log ("Enable-StartupByNumber: indices " + ($Indexes -join ','))
     $list = Get-Startups
     $i=0; $map=@{}
     foreach ($it in $list) { $i++; $map[$i] = $it }
@@ -509,7 +545,13 @@ function Menu-Startups {
         }
     }
 
+# Aliases de verbo aprovado (retrocompat): chamada por nome PT segue funcionando;
+# os aliases melhoram a descoberta no console (Get-Command Clear-*, Switch-*).
+Set-Alias -Name Clear-Temp       -Value Clean-Temp     -Scope Script -Force
+Set-Alias -Name Switch-PowerPlan -Value Toggle-PowerPlan -Scope Script -Force
+
 Export-ModuleMember -Function Pause-Local, Is-ServerOS, Set-DWord, Backup-Registro, `
     Show-Estado, Toggle-PowerPlan, Clean-Temp, Get-Startups, Parse-Selection, `
     Disable-StartupByNumber, Enable-StartupByNumber, Menu-Startups, `
-    Storage-Maintenance, Disk-SMART, Power-CPU-Tune, SearchIndexer-Toggle, Tasks-Noise
+    Storage-Maintenance, Disk-SMART, Power-CPU-Tune, SearchIndexer-Toggle, Tasks-Noise `
+    -Alias Clear-Temp, Switch-PowerPlan

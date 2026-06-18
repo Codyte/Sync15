@@ -40,15 +40,19 @@ function Get-DiscosInfo {
 
 function Monitorar-Recursos {
     param(
-        [int]$IntervaloMs = 100,        # 4x por segundo (ajuste p/ 100–500ms conforme a carga)
-        [int]$CiclosDisco = 50          # atualiza os discos a cada N ciclos (para não pesar)
+        [int]$IntervaloMs = 250,        # ~4x/s e' excesso; 250-500ms baixa CPU do proprio monitor
+        [int]$CiclosDisco = 20          # atualiza os discos a cada N ciclos (para não pesar)
     )
 
     $ciclo = 0
     $discosCache = Get-DiscosInfo
 
     $largura = [Console]::WindowWidth
+    $cursorVisivelOrig = $true
+    try { $cursorVisivelOrig = [Console]::CursorVisible } catch { }
+
     Clear-Host
+    try { [Console]::CursorVisible = $false } catch { }
     Write-Host ("--- MONITORAMENTO EM TEMPO REAL (Ctrl+C para sair) ---").PadRight($largura)
 
     # Pré-aloca linhas fixas para reescrever no mesmo lugar
@@ -56,38 +60,45 @@ function Monitorar-Recursos {
     Write-Host ("Discos: (atualiza a cada $CiclosDisco ciclos)").PadRight($largura)
     Write-Host ("").PadRight($largura)  # linha separadora
 
-    while ($true) {
-        try {
-            $cpu = Get-CpuRapido
-            if ($null -eq $cpu) { $cpu = 0 }
+    # try/finally: Ctrl+C deixava o cursor invisivel e mal-posicionado; finally
+    # restaura visibilidade e empurra o cursor para baixo do bloco antes de sair.
+    try {
+        while ($true) {
+            try {
+                $cpu = Get-CpuRapido
+                if ($null -eq $cpu) { $cpu = 0 }
 
-            $mem = Get-MemUsoMB
+                $mem = Get-MemUsoMB
 
-            # Atualiza discos com menos frequência
-            if ($ciclo % $CiclosDisco -eq 0) {
-                $discosCache = Get-DiscosInfo
+                # Atualiza discos com menos frequência
+                if ($ciclo % $CiclosDisco -eq 0) {
+                    $discosCache = Get-DiscosInfo
+                }
+
+                # Monta uma linha compacta de discos
+                $discosStr = ($discosCache | ForEach-Object {
+                    "{0}: {1}/{2} GB ({3}%)" -f $_.Name, $_.'Used (GB)', $_.'Total (GB)', $_.'% Used'
+                }) -join " | "
+
+                # Reposiciona o cursor e reescreve sem Clear-Host
+                [Console]::SetCursorPosition(0,1)
+                Write-Host ("CPU: {0:N1} % | RAM: {1:N1} / {2:N1} MB".PadRight($largura) -f $cpu, $mem.UsadoMB, $mem.TotalMB)
+                [Console]::SetCursorPosition(0,2)
+                Write-Host ("Discos: ".PadRight($largura))
+                [Console]::SetCursorPosition(0,3)
+                Write-Host ($discosStr.PadRight($largura))
+
+                $ciclo++
+                Start-Sleep -Milliseconds $IntervaloMs
+            } catch {
+                [Console]::SetCursorPosition(0,1)
+                Write-Host ("[WARN] Erro ao coletar dados... tentando novamente.".PadRight($largura))
+                Start-Sleep -Milliseconds ([Math]::Min(5000, $IntervaloMs + 500))
             }
-
-            # Monta uma linha compacta de discos
-            $discosStr = ($discosCache | ForEach-Object {
-                "{0}: {1}/{2} GB ({3}%)" -f $_.Name, $_.'Used (GB)', $_.'Total (GB)', $_.'% Used'
-            }) -join " | "
-
-            # Reposiciona o cursor e reescreve sem Clear-Host
-            [Console]::SetCursorPosition(0,1)
-            Write-Host ("CPU: {0:N1} % | RAM: {1:N1} / {2:N1} MB".PadRight($largura) -f $cpu, $mem.UsadoMB, $mem.TotalMB)
-            [Console]::SetCursorPosition(0,2)
-            Write-Host ("Discos: ".PadRight($largura))
-            [Console]::SetCursorPosition(0,3)
-            Write-Host ($discosStr.PadRight($largura))
-
-            $ciclo++
-            Start-Sleep -Milliseconds $IntervaloMs
-        } catch {
-            [Console]::SetCursorPosition(0,1)
-            Write-Host ("[WARN] Erro ao coletar dados... tentando novamente.".PadRight($largura))
-            Start-Sleep -Milliseconds ([Math]::Min(5000, $IntervaloMs + 500))
         }
+    } finally {
+        try { [Console]::SetCursorPosition(0,4) } catch { }
+        try { [Console]::CursorVisible = $cursorVisivelOrig } catch { }
     }
 }
 

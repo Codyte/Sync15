@@ -72,12 +72,23 @@ function Testar-PortaTCP {
 function Ping-Sweep {
     $subnet = Read-Host "Digite o prefixo da sub-rede (ex: 192.168.1)"
     if ($subnet -notmatch "^\d{1,3}\.\d{1,3}\.\d{1,3}$") { Write-Warning "Formato de sub-rede inválido."; Pause-Script; return }
-    1..254 | ForEach-Object {
-        $ip = "$subnet.$_"
-        if (Test-Connection -ComputerName $ip -Count 1 -Quiet -ErrorAction SilentlyContinue) {
-            Write-Host "$ip está ATIVO" -ForegroundColor Green
+    $ips = 1..254 | ForEach-Object { "$subnet.$_" }
+    Write-Host "Varrendo $subnet.1-254 ..." -ForegroundColor Yellow
+
+    # PS7: varredura PARALELA (era serial = minutos); PS5: fallback serial.
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        $ativos = $ips | ForEach-Object -ThrottleLimit 64 -Parallel {
+            if (Test-Connection -TargetName $_ -Count 1 -Quiet -TimeoutSeconds 1 -ErrorAction SilentlyContinue) { $_ }
+        }
+    } else {
+        $ativos = foreach ($ip in $ips) {
+            if (Test-Connection -ComputerName $ip -Count 1 -Quiet -ErrorAction SilentlyContinue) { $ip }
         }
     }
+
+    $ativos = @($ativos) | Sort-Object { [version]$_ }
+    foreach ($ip in $ativos) { Write-Host "$ip está ATIVO" -ForegroundColor Green }
+    Write-Host ("Concluído: {0} host(s) ativo(s) de 254." -f $ativos.Count) -ForegroundColor Cyan
     Pause-Script
 }
 
@@ -121,15 +132,29 @@ function Scan-ARP {
 function Descobrir-Hostnames {
     $subnet = Read-Host "Digite o prefixo da sub-rede (ex: 192.168.1)"
     if ($subnet -notmatch "^\d{1,3}\.\d{1,3}\.\d{1,3}$") { Write-Warning "Formato de sub-rede inválido."; Pause-Script; return }
-    1..254 | ForEach-Object {
-        $ip = "$subnet.$_"
-        try {
-            $hostname = [System.Net.Dns]::GetHostEntry($ip).HostName
-            if($hostname -ne $ip){
-                Write-Host "$ip -> $hostname" -ForegroundColor Cyan
-            }
-        } catch { Write-Verbose $_.Exception.Message }
+    $ips = 1..254 | ForEach-Object { "$subnet.$_" }
+    Write-Host "Resolvendo hostnames em $subnet.1-254 ..." -ForegroundColor Yellow
+
+    # PS7: resolucao DNS reversa PARALELA (era serial = minutos); PS5: fallback serial.
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        $resultados = $ips | ForEach-Object -ThrottleLimit 64 -Parallel {
+            try {
+                $hostname = [System.Net.Dns]::GetHostEntry($_).HostName
+                if ($hostname -ne $_) { "$_ -> $hostname" }
+            } catch { }
+        }
+    } else {
+        $resultados = foreach ($ip in $ips) {
+            try {
+                $hostname = [System.Net.Dns]::GetHostEntry($ip).HostName
+                if ($hostname -ne $ip) { "$ip -> $hostname" }
+            } catch { Write-Verbose $_.Exception.Message }
+        }
     }
+
+    $resultados = @($resultados)
+    foreach ($linha in $resultados) { Write-Host $linha -ForegroundColor Cyan }
+    Write-Host ("Concluído: {0} hostname(s) resolvido(s)." -f $resultados.Count) -ForegroundColor Cyan
     Pause-Script
 }
 
@@ -146,8 +171,10 @@ function Whois-Lookup {
 function Scan-Servicos {
     $alvo = Read-Host "Digite o host/IP para verificar serviços comuns"
     $servicos = @{ "HTTP"=80; "HTTPS"=443; "FTP"=21; "SMB"=445; "RDP"=3389; "SSH"=22 }
+    # Test-TcpPort (BeginConnect+timeout) no lugar de Test-NetConnection: este trava
+    # ~segundos por porta filtrada e e' bem mais lento que o socket nao-bloqueante.
     foreach ($svc in $servicos.Keys) {
-        if(Test-NetConnection -ComputerName $alvo -Port $servicos[$svc] -WarningAction SilentlyContinue | Select-Object -ExpandProperty TcpTestSucceeded){
+        if (Test-TcpPort -ComputerName $alvo -Port $servicos[$svc] -TimeoutMs 600) {
              Write-Host "$svc ($($servicos[$svc])) ABERTO em $alvo" -ForegroundColor Green
         }
     }

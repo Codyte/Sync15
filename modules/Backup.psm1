@@ -28,7 +28,14 @@ function Restaurar-BackupZIP {
     $destino = $destinoObj.Caminho
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $destino)
+        # PS7 (.NET Core) tem o overload (origem, destino, overwriteFiles): sem ele
+        # ExtractToDirectory lanca se algum arquivo ja existe no destino. PS5 (.NET
+        # Framework) nao tem o overload, entao cai no de 2 args (comportamento antigo).
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $destino, $true)
+        } else {
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zip.FullName, $destino)
+        }
         Write-Host "Backup ZIP restaurado com sucesso para: $destino" -ForegroundColor Green
         Registrar-Log "Restaurado ZIP $($zip.FullName) para $destino"
     } catch {

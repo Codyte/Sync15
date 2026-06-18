@@ -16,6 +16,7 @@
     # Core primeiro: os modulos de dominio dependem de Registrar-Log/Test-IsAdmin/etc.
     NestedModules = @(
         'modules\Core.psm1',
+        'modules\Menu.psm1',
         'modules\Otimizacao.psm1',
         'modules\Sync.psm1',
         'modules\Backup.psm1',
@@ -30,6 +31,8 @@
         # Core
         'Get-SyncMasterDataDir','Start-SyncMasterLog','Stop-SyncMasterLog','Pause-Script',
         'Confirm-Action','Registrar-Log','Visualizar-Logs','Ensure-Dir','Test-IsAdmin','Require-Admin',
+        # Menu (data-driven, Fase C)
+        'Get-MenuPrincipal','Show-MenuPrincipal',
         # Otimizacao
         'Pause-Local','Is-ServerOS','Set-DWord','Backup-Registro','Show-Estado','Toggle-PowerPlan',
         'Clean-Temp','Get-Startups','Parse-Selection','Disable-StartupByNumber','Enable-StartupByNumber',

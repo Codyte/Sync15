@@ -1314,61 +1314,28 @@ switch ($Acao.ToUpper()) {
             Read-Host "Pressione Enter para fechar."
             exit
         }
+        # Menu data-driven (Fase C): a tabela vem de Get-MenuPrincipal (modules\Menu.psm1).
+        # O dispatch fica AQUI (escopo do launcher) porque acoes como Menu-Otimizacao/Executor/
+        # Criar-App sao definidas neste .ps1 e nao seriam visiveis de dentro de um modulo.
+        $entradas = Get-MenuPrincipal
         do {
-            Clear-Host
-            Write-Host "======================================================" -ForegroundColor DarkGray
-            Write-Host "  SUPER FERRAMENTA DE ENGENHARIA - v15.0 (Consolidado)" -ForegroundColor Green
-            Write-Host "======================================================" -ForegroundColor DarkGray
-            Write-Host " 1 - Sincronização de Arquivos (simular/copiar/espelhar)"
-            Write-Host " 2 - Otimização e Reparo do Sistema"
-            Write-Host " 3 - Gerenciamento de Ativação (Oficial)"
-            Write-Host " 4 - Gerenciar Diretórios Salvos" -ForegroundColor Yellow
-            Write-Host " 5 - Backup ZIP de Pastas"
-            Write-Host " 6 - Restaurar Backup ZIP"
-            Write-Host " 7 - Monitoramento de Recursos em Tempo Real"
-            Write-Host " 8 - Histórico de Logs de Operação"
-            Write-Host " 9 - Agendar Sincronização (Task Scheduler)"
-            Write-Host "10 - Verificar Integridade de Arquivos (HASH)"
-            Write-Host "11 - Diagnóstico de Hardware/Sistema"
-            Write-Host "12 - Gerenciar Permissões de Pasta"
-            Write-Host "13 - Diagnostico de Rede"
-            Write-Host "14 - Clonar Pendrive/Disco (BÁSICO)"
-            Write-Host "15 - Menu de Atualização do PowerShell"
-            Write-Host "ZZ - Módulo GUI MicroWin (WinUtil)" -ForegroundColor Red
-	    Write-Host "app - Criar Aplicativo de Script" -ForegroundColor Red
-            Write-Host " Q - Sair"
-            Write-Host "======================================================" -ForegroundColor DarkGray
-            
+            Show-MenuPrincipal -Entradas $entradas
+
             $escolha = Read-Host "Digite sua escolha e pressione Enter"
             Registrar-Log "Menu principal: opcao '$escolha'"
 
-            switch ($escolha.ToUpper()) {
-                '1'  { Iniciar-Sincronizacao }
-                '2'  { Menu-Otimizacao }
-                '3'  { Menu-Ativacao }
-                '4'  { Menu-GerenciamentoDiretorios }
-                '5'  { Criar-BackupZIP }
-                '6'  { Restaurar-BackupZIP }
-                '7'  { Monitorar-Recursos }
-                '8'  { Visualizar-Logs }
-                '9'  { Agendar-TarefaSincronizacao }
-                '10' { Verificar-IntegridadeArquivos }
-                '11' { Diagnostico-Hardware }
-                '12' { Permissoes-Pasta }
-                '13' { Menu-DiagnosticoRede }
-                '14' { Clonar-Disco }
-                '15' { Menu-AtualizacaoPowerShell }
-                'ZZ' { Executor }
-                'app'{ Criar-App }
-                'Q'  { 
-                    Write-Host "Encerrando script. Até logo, Eng. Ortiz." -ForegroundColor Green
-                    exit
-                }
-                default { 
-                    Write-Warning "Opção inválida. Tente novamente."
-                    Pause-Script 
-                }
+            $sel = $entradas | Where-Object { $_.Id -eq ([string]$escolha).ToUpper() } | Select-Object -First 1
+            if (-not $sel) {
+                Write-Warning "Opção inválida. Tente novamente."
+                Pause-Script
+                continue
             }
+            if ($sel.Comando -eq '__SAIR__') {
+                Write-Host "Encerrando script. Até logo, Eng. Ortiz." -ForegroundColor Green
+                exit
+            }
+            # Despacha pelo nome da funcao (modulo OU definida neste launcher).
+            & $sel.Comando
         } while ($true)
     }
 

@@ -7,26 +7,26 @@
 #   L211   Menu-Otimizacao
 #   L245   Criar-PontoRestauracao
 #   L332   Restaurar-PontoRestauracao
-#   L468   Menu-LimpezaDisco
-#   L496   Configurar-ServicoDefrag
-#   L596   Utilitários robustos ===============================================
-#   L617   Menu-ReparoSistema
-#   L646   Get-PowerPlans
-#   L667   Criar-PlanoDeEnergia
-#   L683   Menu-CriarPlanoEnergia
-#   L704   Mostrar-EstadoOtimizacao
-#   L718   Menu-OtimizacaoAvancada
-#   L805   Menu-Desempenho
-#   L870   Menu-GerenciarAgentes
-#   L908   Gerenciar-ServicoDeAgente
-#   L958   Menu-Ferramentas
-#   L984   Menu-Avancado
-#   L1023  Gerenciar-EstadosOciososProcessador
-#   L1063  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
-#   L1098  Criar-App
-#   L1153  Executor
-#   L1226  Aliases de verbo aprovado (retrocompat v15) ---
-#   L1236  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+#   L469   Menu-LimpezaDisco
+#   L497   Configurar-ServicoDefrag
+#   L601   Utilitários robustos ===============================================
+#   L622   Menu-ReparoSistema
+#   L651   Get-PowerPlans
+#   L672   Criar-PlanoDeEnergia
+#   L688   Menu-CriarPlanoEnergia
+#   L709   Mostrar-EstadoOtimizacao
+#   L723   Menu-OtimizacaoAvancada
+#   L810   Menu-Desempenho
+#   L875   Menu-GerenciarAgentes
+#   L913   Gerenciar-ServicoDeAgente
+#   L963   Menu-Ferramentas
+#   L989   Menu-Avancado
+#   L1031  Gerenciar-EstadosOciososProcessador
+#   L1074  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
+#   L1109  Criar-App
+#   L1164  Executor
+#   L1237  Aliases de verbo aprovado (retrocompat v15) ---
+#   L1247  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # ======================= END NAV INDEX =======================
 
 # ===================================================================
@@ -427,6 +427,7 @@ function Restaurar-PontoRestauracao {
 
     # 4) Executa restauração
     Write-Host "Solicitando restauração do sistema..." -ForegroundColor Yellow
+    Registrar-Log ("Restaurar-PontoRestauracao: Seq {0} - '{1}'" -f $target.SequenceNumber, $target.Description)
     $ret = Invoke-CimMethod -Namespace $ns -ClassName $cls -MethodName Restore -Arguments @{
         RestorePoint = [uint32]$target.SequenceNumber
     }
@@ -479,11 +480,11 @@ function Menu-LimpezaDisco {
         switch ($opcao.ToUpper()) {
             '1' { Write-Host "Iniciando Limpeza de Disco..."; Start-Process "cleanmgr.exe" -Wait; Pause-Script }
             '2' { Write-Host "Iniciando Otimizador de Unidades..."; Start-Process "dfrgui.exe"; Pause-Script }
-            '3' { if(Confirm-Action "Desativar a hibernação?"){ powercfg -h off }; Pause-Script }
-            '4' { if(Confirm-Action "Reativar a hibernação?"){ powercfg -h on }; Pause-Script }
-            '5' { 
+            '3' { if(Confirm-Action "Desativar a hibernação?"){ powercfg -h off; Registrar-Log "Hibernacao DESATIVADA (powercfg -h off)" }; Pause-Script }
+            '4' { if(Confirm-Action "Reativar a hibernação?"){ powercfg -h on; Registrar-Log "Hibernacao REATIVADA (powercfg -h on)" }; Pause-Script }
+            '5' {
                 fsutil behavior query DisableDeleteNotify
-                if(Confirm-Action "Garantir que o TRIM esteja ATIVADO (valor 0)?"){ fsutil behavior set DisableDeleteNotify 0 }
+                if(Confirm-Action "Garantir que o TRIM esteja ATIVADO (valor 0)?"){ fsutil behavior set DisableDeleteNotify 0; Registrar-Log "TRIM ativado (DisableDeleteNotify=0)" }
                 Pause-Script
             }
             '6' { Configurar-ServicoDefrag }
@@ -522,12 +523,14 @@ function Configurar-ServicoDefrag {
                 if(Confirm-Action "Definir 'defragsvc' como Automático e Iniciar?") {
                     Set-Service defragsvc -StartupType Automatic
                     Start-Service defragsvc
+                    Registrar-Log "defragsvc -> Automatico + iniciado"
                     Write-Host "Serviço 'defragsvc' configurado como Automático e iniciado." -ForegroundColor Green
                 }
             }
             '2' {
                 if(Confirm-Action "Definir 'defragsvc' como Manual?") {
                     Set-Service defragsvc -StartupType Manual
+                    Registrar-Log "defragsvc -> Manual"
                     Write-Host "Serviço 'defragsvc' configurado como Manual." -ForegroundColor Green
                 }
             }
@@ -535,6 +538,7 @@ function Configurar-ServicoDefrag {
                 if ($servico.Status -eq "Running") {
                     if(Confirm-Action "Parar o serviço 'defragsvc'?") {
                         Stop-Service defragsvc -Force
+                        Registrar-Log "defragsvc -> parado"
                         Write-Host "Serviço 'defragsvc' parado." -ForegroundColor Green
                     }
                 } else { Write-Warning "Serviço 'defragsvc' não está em execução."}
@@ -543,6 +547,7 @@ function Configurar-ServicoDefrag {
                  if ($servico.Status -ne "Running" -and $servico.StartupType -ne "Disabled") {
                     if(Confirm-Action "Iniciar o serviço 'defragsvc'?") {
                         Start-Service defragsvc
+                        Registrar-Log "defragsvc -> iniciado"
                         Write-Host "Serviço 'defragsvc' iniciado." -ForegroundColor Green
                     }
                 } elseif ($servico.StartupType -eq "Disabled") {
@@ -924,22 +929,22 @@ function Gerenciar-ServicoDeAgente {
         }
         "Parar" {
             if ($servico.Status -eq "Running") {
-                if (Confirm-Action "Parar o serviço '$NomeDoServico'?") { Stop-Service -Name $NomeDoServico -Force; Write-Host "'$NomeDoServico' parado." -ForegroundColor Green }
+                if (Confirm-Action "Parar o serviço '$NomeDoServico'?") { Stop-Service -Name $NomeDoServico -Force; Registrar-Log "Agente '$NomeDoServico' -> parado"; Write-Host "'$NomeDoServico' parado." -ForegroundColor Green }
             } else { Write-Warning "'$NomeDoServico' já está parado." }
         }
         "Iniciar" {
             if ($servico.Status -ne "Running") {
-                if (Confirm-Action "Iniciar o serviço '$NomeDoServico'?") { Start-Service -Name $NomeDoServico; Write-Host "'$NomeDoServico' iniciado." -ForegroundColor Green }
+                if (Confirm-Action "Iniciar o serviço '$NomeDoServico'?") { Start-Service -Name $NomeDoServico; Registrar-Log "Agente '$NomeDoServico' -> iniciado"; Write-Host "'$NomeDoServico' iniciado." -ForegroundColor Green }
             } else { Write-Warning "'$NomeDoServico' já está em execução." }
         }
         "Desabilitar" {
             if ($servico.StartupType -ne "Disabled") {
-                if (Confirm-Action "DESABILITAR o serviço '$NomeDoServico'?") { Set-Service -Name $NomeDoServico -StartupType Disabled; Write-Host "'$NomeDoServico' desabilitado." -ForegroundColor Green }
+                if (Confirm-Action "DESABILITAR o serviço '$NomeDoServico'?") { Set-Service -Name $NomeDoServico -StartupType Disabled; Registrar-Log "Agente '$NomeDoServico' -> desabilitado (Startup=Disabled)"; Write-Host "'$NomeDoServico' desabilitado." -ForegroundColor Green }
             } else { Write-Warning "'$NomeDoServico' já está desabilitado." }
         }
         "Habilitar" {
              if ($servico.StartupType -ne "Automatic") {
-                if (Confirm-Action "HABILITAR (Automático) o serviço '$NomeDoServico'?") { Set-Service -Name $NomeDoServico -StartupType Automatic; Write-Host "'$NomeDoServico' habilitado." -ForegroundColor Green }
+                if (Confirm-Action "HABILITAR (Automático) o serviço '$NomeDoServico'?") { Set-Service -Name $NomeDoServico -StartupType Automatic; Registrar-Log "Agente '$NomeDoServico' -> habilitado (Startup=Automatic)"; Write-Host "'$NomeDoServico' habilitado." -ForegroundColor Green }
             } else { Write-Warning "'$NomeDoServico' já está habilitado." }
         }
     }
@@ -1005,6 +1010,9 @@ function Menu-Avancado {
             '3' {
                 Write-Warning "Alterar BCDEDIT pode impedir o boot do sistema. NÃO prossiga sem um backup completo."
                 if(Confirm-Action -Prompt "Entendo os riscos e desejo prosseguir?"){
+                    if (Confirm-Action -Prompt "Criar um Ponto de Restauração antes? (fortemente recomendado)") {
+                        Criar-PontoRestauracao -Descricao "Antes de bcdedit (Sync Master v15)"
+                    }
                     $bcd_cmd = Read-Host "Digite o comando bcdedit COMPLETO a ser executado (ex: /set useplatformclock true)"
                     if ([string]::IsNullOrWhiteSpace($bcd_cmd)) { Write-Warning "Nenhum comando inserido." }
                     elseif(Confirm-Action -Prompt "Executar 'bcdedit $bcd_cmd'?"){
@@ -1039,6 +1047,9 @@ function Gerenciar-EstadosOciososProcessador {
         }
         '2' {
             if (Confirm-Action -Prompt "AVISO: Desabilitar estados ociosos (IDLEDISABLE = 1)?") {
+                 if (Confirm-Action -Prompt "Criar um Ponto de Restauração antes? (recomendado)") {
+                    Criar-PontoRestauracao -Descricao "Antes de desabilitar idle states (Sync Master v15)"
+                 }
                  if (Confirm-Action -Prompt "CONFIRMAÇÃO FINAL: Continuar?") {
                     Powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR IDLEDISABLE 1
                     Powercfg /SETACTIVE SCHEME_CURRENT

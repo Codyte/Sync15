@@ -286,10 +286,10 @@ function Menu-Rede {
         Write-Host "Q. Voltar"
         $opcao = Read-Host "Sua escolha"
         switch ($opcao.ToUpper()) {
-            '1' { ipconfig /flushdns; Write-Host "Cache DNS limpo."; Pause-Script }
-            '2' { ipconfig /release; ipconfig /renew; Write-Host "IP renovado."; Pause-Script }
-            '3' { netsh winsock reset; Write-Host "Winsock redefinido. Reinicie se necessário."; Pause-Script }
-            '4' { netsh int ip reset; Write-Host "Pilha TCP/IP redefinida. Reinicie se necessário."; Pause-Script }
+            '1' { ipconfig /flushdns; Registrar-Log "Rede: flushdns"; Write-Host "Cache DNS limpo."; Pause-Script }
+            '2' { ipconfig /release; ipconfig /renew; Registrar-Log "Rede: release+renew DHCP"; Write-Host "IP renovado."; Pause-Script }
+            '3' { netsh winsock reset; Registrar-Log "Rede: WINSOCK RESET (requer reboot)"; Write-Host "Winsock redefinido. Reinicie se necessário."; Pause-Script }
+            '4' { netsh int ip reset; Registrar-Log "Rede: TCP/IP STACK RESET (requer reboot)"; Write-Host "Pilha TCP/IP redefinida. Reinicie se necessário."; Pause-Script }
             '5' { ping google.com; Pause-Script }
             '6' { Configurar-TcpAutoTuning }
             '7' { Otimizar-QoS }
@@ -323,6 +323,7 @@ function Configurar-TcpAutoTuning {
         if (Confirm-Action "Definir Nível de Autoajuste TCP como '$level'?") {
             try {
                 netsh int tcp set global autotuninglevel=$level
+                Registrar-Log "Rede: TCP autotuninglevel=$level"
                 Write-Host "Nível de Autoajuste TCP definido como '$level'." -ForegroundColor Green
                 Write-Host "Pode ser necessário reiniciar para que todas as aplicações reconheçam a mudança." -ForegroundColor Yellow
             } catch {
@@ -357,6 +358,7 @@ function Otimizar-QoS {
                     try {
                         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
                         Set-ItemProperty -Path $regPath -Name $regKey -Value 0 -Type DWord -Force
+                        Registrar-Log "Rede: QoS NonBestEffortLimit=0 (otimizado)"
                         Write-Host "Otimização de QoS aplicada com sucesso!" -ForegroundColor Green
                     } catch { Write-Warning "Falha ao aplicar a otimização. Erro: $($_.Exception.Message)" }
                 }
@@ -367,6 +369,7 @@ function Otimizar-QoS {
                      if (Confirm-Action -Prompt "Confirma a EXCLUSÃO da chave 'NonBestEffortLimit'?") {
                         try {
                             Remove-ItemProperty -Path $regPath -Name $regKey -Force -ErrorAction Stop
+                            Registrar-Log "Rede: QoS NonBestEffortLimit removido (padrao Windows)"
                             Write-Host "Padrão do Windows restaurado." -ForegroundColor Green
                         } catch { Write-Warning "Falha ao remover a chave. Erro: $($_.Exception.Message)" }
                     }

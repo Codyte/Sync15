@@ -2,14 +2,30 @@
     Core.psm1 — utilitarios base do Sync Master, sem dependencias de dominio.
     Primeiro modulo extraido do monolito Sync_MasterV14.ps1 (Fase 5 do refator).
 
-    $LogsDir fica encapsulado aqui (escopo de modulo). Como o modulo vive em
-    modules/, a pasta Logs/ continua na raiz do projeto (parent do PSScriptRoot).
+    Estado GRAVAVEL (logs, backups, config) mora num data dir do usuario, NAO ao lado
+    do script — assim o Sync Master roda de qualquer local e em qualquer PC Windows,
+    inclusive de pastas somente-leitura (Program Files, rede, midia). Ver Get-SyncMasterDataDir.
 #>
 
-$script:LogsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'Logs'
-if (-not (Test-Path $script:LogsDir)) {
-    New-Item -ItemType Directory -Path $script:LogsDir -Force | Out-Null
+function Get-SyncMasterDataDir {
+    <#
+      .SYNOPSIS  Retorna (criando) o diretorio GRAVAVEL de dados do Sync Master.
+      .DESCRIPTION  Portabilidade: o estado nao acompanha o script. Base resolvida por:
+        1) $env:SYNCMASTER_DATA_DIR (override explicito);
+        2) %LOCALAPPDATA%\SyncMaster (padrao por-usuario);
+        3) %USERPROFILE%\SyncMaster (fallback se LOCALAPPDATA ausente).
+      .PARAMETER SubPasta  Subpasta opcional (ex.: 'Logs', 'Backups'); tambem e' criada.
+    #>
+    param([string]$SubPasta)
+    $base = if ($env:SYNCMASTER_DATA_DIR)   { $env:SYNCMASTER_DATA_DIR }
+            elseif ($env:LOCALAPPDATA)      { Join-Path $env:LOCALAPPDATA 'SyncMaster' }
+            else                            { Join-Path $env:USERPROFILE  'SyncMaster' }
+    $dir = if ($SubPasta) { Join-Path $base $SubPasta } else { $base }
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    return $dir
 }
+
+$script:LogsDir = Get-SyncMasterDataDir -SubPasta 'Logs'
 
 # Pausa o script ate o usuario pressionar uma tecla.
 function Pause-Script {
@@ -65,4 +81,4 @@ function Require-Admin {
     }
 }
 
-Export-ModuleMember -Function Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin
+Export-ModuleMember -Function Get-SyncMasterDataDir, Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin

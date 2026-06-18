@@ -2,7 +2,7 @@
     Hardware.psm1 — monitoramento e diagnostico de hardware.
     Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
 #>
-Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
 function Get-CpuRapido {
     try {

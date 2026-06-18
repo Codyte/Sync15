@@ -1,11 +1,18 @@
 ﻿<#
     Sync.psm1 — engine de sincronizacao (robocopy) + diretorios salvos do Sync Master.
     Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
-    Estado dos diretorios salvos encapsulado aqui (diretorios.json na raiz do projeto).
+    Estado dos diretorios salvos (diretorios.json) mora no data dir do usuario
+    (Get-SyncMasterDataDir) para o script ser portatil; migra o legado da raiz uma vez.
 #>
-Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
-$script:diretoriosConfigFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'diretorios.json'
+$script:diretoriosConfigFile = Join-Path (Get-SyncMasterDataDir) 'diretorios.json'
+# Migracao 1x: versoes antigas gravavam diretorios.json na raiz do projeto. Se o novo
+# local ainda nao tem o arquivo mas o legado existe, traz os diretorios salvos do usuario.
+$legadoConfig = Join-Path (Split-Path $PSScriptRoot -Parent) 'diretorios.json'
+if (-not (Test-Path $script:diretoriosConfigFile) -and (Test-Path $legadoConfig)) {
+    try { Copy-Item -LiteralPath $legadoConfig -Destination $script:diretoriosConfigFile -Force } catch { Write-Verbose $_.Exception.Message }
+}
 if (Test-Path $script:diretoriosConfigFile) {
     try {
         $script:diretoriosSalvos = Get-Content $script:diretoriosConfigFile -Raw | ConvertFrom-Json
@@ -239,7 +246,7 @@ function Executar-Robocopy {
     if ((Convert-Path $Origem) -eq (Convert-Path $Destino)) { Write-Error "As pastas de origem e destino não podem ser iguais."; Pause-Script; return }
     if (-not (VerificarEspacoEmDisco -caminho $Destino)) { Write-Host "Abortando devido a espaço em disco insuficiente ou cancelamento do usuário."; Pause-Script; return }
     if (-not (Confirm-Action -Prompt "Confirma o início da sincronização?")) { Write-Host "Operação cancelada."; Pause-Script; return }
-    $logFile = Join-Path -Path $PSScriptRoot -ChildPath "sincronizacao_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
+    $logFile = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath "sincronizacao_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
     Start-Transcript -Path $logFile -Append
     try {
         if ($ModoSincronizacao -eq "Unilateral") {
@@ -557,7 +564,7 @@ function Start-RobocopyUnilateralSeguro {
         }
     }
 
-    $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
+    $log = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath ("robocopy_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
 
     # Argumentos via nucleo puro (Get-RobocopyArgs): /COPYALL preserva ACL/owner/auditing
     # (precisa admin); /COPY:DAT evita Owner/SACL.
@@ -612,7 +619,7 @@ function Start-RobocopyEspelho {
         }
     }
 
-    $log = Join-Path -Path $PSScriptRoot -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
+    $log = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
     $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular
 
     Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
@@ -641,10 +648,23 @@ function Agendar-TarefaSincronizacao {
     $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO da sincronização agendada"
     if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
 
+    # Caminho do SCRIPT DE ENTRADA (nao deste .psm1): o launcher exporta SYNCMASTER_ENTRY.
+    # $MyInvocation.MyCommand.Definition aqui dentro do modulo apontava para Sync.psm1 (bug):
+    # a Tarefa Agendada chamava o modulo em vez do Sync_MasterV15.ps1.
+    $entryScript = if ($env:SYNCMASTER_ENTRY -and (Test-Path $env:SYNCMASTER_ENTRY)) {
+        $env:SYNCMASTER_ENTRY
+    } else {
+        Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_MasterV15.ps1'
+    }
+    if (-not (Test-Path $entryScript)) {
+        Write-Warning "Script de entrada nao localizado ($entryScript). Abra o Sync Master pelo Sync_MasterV15.ps1 e tente de novo."
+        Pause-Script; return
+    }
+
     $nomeTarefa = "SincronizacaoEngOrtiz_" + (Get-Date -Format "yyyyMMdd")
     $trigger = New-ScheduledTaskTrigger -Daily -At $hora
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Definition)`" -Acao Sincronizar -Origem `"$($origemObj.Caminho)`" -Destino `"$($destinoObj.Caminho)`""
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$entryScript`" -Acao Sincronizar -Origem `"$($origemObj.Caminho)`" -Destino `"$($destinoObj.Caminho)`""
     
     try {
         Register-ScheduledTask -TaskName $nomeTarefa -Trigger $trigger -Action $action -Principal $principal -Description "Sincronização automática configurada pela Ferramenta de Engenharia." -Force

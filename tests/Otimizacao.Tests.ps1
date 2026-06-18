@@ -32,6 +32,27 @@ Describe 'Parse-Selection' {
     }
 }
 
+Describe 'Get-SyncMasterDataDir' {
+    It 'respeita o override $env:SYNCMASTER_DATA_DIR e cria a pasta' {
+        $old = $env:SYNCMASTER_DATA_DIR
+        try {
+            $env:SYNCMASTER_DATA_DIR = Join-Path $TestDrive 'dados'
+            $d = Get-SyncMasterDataDir
+            $d | Should -Be (Join-Path $TestDrive 'dados')
+            Test-Path $d | Should -BeTrue
+        } finally { $env:SYNCMASTER_DATA_DIR = $old }
+    }
+    It 'cria a subpasta pedida (ex.: Logs)' {
+        $old = $env:SYNCMASTER_DATA_DIR
+        try {
+            $env:SYNCMASTER_DATA_DIR = Join-Path $TestDrive 'dados2'
+            $sub = Get-SyncMasterDataDir -SubPasta 'Logs'
+            $sub | Should -Be (Join-Path (Join-Path $TestDrive 'dados2') 'Logs')
+            Test-Path $sub | Should -BeTrue
+        } finally { $env:SYNCMASTER_DATA_DIR = $old }
+    }
+}
+
 Describe 'Ensure-Dir' {
     It 'cria o diretorio (inclusive aninhado)' {
         $p = Join-Path $TestDrive 'a\b\c'

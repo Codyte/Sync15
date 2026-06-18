@@ -2,7 +2,7 @@
     Arquivos.psm1 — operacoes de arquivos (duplicados, integridade, permissoes, lixeira).
     Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
 #>
-Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
 function Remove-ToRecycleBin {
     param([Parameter(Mandatory)][string]$Path)
@@ -434,7 +434,7 @@ function Verificar-IntegridadeArquivos {
     
     try {
         $hashes = Get-ChildItem $pasta -Recurse -File | Get-FileHash -Algorithm SHA256
-        $arquivoHash = Join-Path $PSScriptRoot ("Integridade_" + (Split-Path $pasta -Leaf) + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".csv")
+        $arquivoHash = Join-Path (Get-SyncMasterDataDir -SubPasta 'Relatorios') ("Integridade_" + (Split-Path $pasta -Leaf) + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".csv")
         $hashes | Export-Csv -Path $arquivoHash -NoTypeInformation -Encoding UTF8
         Write-Host "Relatório de hashes de integridade gerado com sucesso em: $arquivoHash" -ForegroundColor Green
         Registrar-Log "Verificação de integridade gerada para '$pasta'."

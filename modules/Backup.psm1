@@ -2,7 +2,7 @@
     Backup.psm1 — backup ZIP e clonagem de disco.
     Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
 #>
-Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
 # ───────────────────────── Nucleo (Fase B) ─────────────────────────
 # Logica sem UI (sem Write-Host/Read-Host/Pause/Out-GridView). Get-ZipBackupPath e' pura;
@@ -75,7 +75,8 @@ function Criar-BackupZIP {
     $origemObj = Selecionar-DiretorioDaLista -Titulo "Selecione a pasta para BACKUP (ZIP)"
     if (-not $origemObj) { Write-Host "Operação cancelada."; Pause-Script; return }
     $origem = $origemObj.Caminho
-    $destinoZIP = Get-ZipBackupPath -OrigemPath $origem -DestinoDir $PSScriptRoot
+    # Backups vao para o data dir do usuario (portavel), nao ao lado do script.
+    $destinoZIP = Get-ZipBackupPath -OrigemPath $origem -DestinoDir (Get-SyncMasterDataDir -SubPasta 'Backups')
     $res = Invoke-ZipBackup -OrigemDir $origem -DestinoZip $destinoZIP
     if ($res.Sucesso) {
         Write-Host "Backup ZIP criado com sucesso: $($res.Caminho)" -ForegroundColor Green
@@ -87,8 +88,10 @@ function Criar-BackupZIP {
 }
 
 function Restaurar-BackupZIP {
-    $zip = Get-ChildItem -Path $PSScriptRoot -Filter *.zip | Out-GridView -Title "Escolha o arquivo ZIP para restaurar" -PassThru
-    if (-not $zip) { Write-Host "Operação cancelada."; Pause-Script; return }
+    # Lista os ZIPs do data dir de backups (mesmo local onde Criar-BackupZIP grava).
+    $bkpDir = Get-SyncMasterDataDir -SubPasta 'Backups'
+    $zip = Get-ChildItem -Path $bkpDir -Filter *.zip -ErrorAction SilentlyContinue | Out-GridView -Title "Escolha o arquivo ZIP para restaurar" -PassThru
+    if (-not $zip) { Write-Host "Nenhum ZIP selecionado (procurados em: $bkpDir)."; Pause-Script; return }
     $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO para RESTAURAR backup ZIP"
     if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }
     $destino = $destinoObj.Caminho

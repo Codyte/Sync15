@@ -126,6 +126,11 @@ if ($child -and -not $child.HasExited) {
 
 # Modulos extraidos (Fase 5 do refator). Core primeiro (dependencia dos demais),
 # depois os outros em ordem alfabetica.
+# Caminho deste script de entrada, exposto aos modulos (ex.: Agendar-TarefaSincronizacao
+# monta a Tarefa Agendada apontando para CA, nao para o .psm1). $PSCommandPath e' o
+# proprio Sync_MasterV15.ps1 mesmo quando chamado de qualquer diretorio.
+$env:SYNCMASTER_ENTRY = $PSCommandPath
+
 $modulesDir = Join-Path $PSScriptRoot 'modules'
 try {
     Import-Module (Join-Path $modulesDir 'Core.psm1') -Force -DisableNameChecking -ErrorAction Stop

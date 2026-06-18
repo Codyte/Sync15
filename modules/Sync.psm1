@@ -247,7 +247,11 @@ function Executar-Robocopy {
     if (-not (VerificarEspacoEmDisco -caminho $Destino)) { Write-Host "Abortando devido a espaço em disco insuficiente ou cancelamento do usuário."; Pause-Script; return }
     if (-not (Confirm-Action -Prompt "Confirma o início da sincronização?")) { Write-Host "Operação cancelada."; Pause-Script; return }
     $logFile = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath "sincronizacao_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
-    Start-Transcript -Path $logFile -Append
+    # Transcript proprio da operacao. $txOk evita que o finally pare o transcript de
+    # SESSAO caso este (aninhado) nao chegue a iniciar (ex.: PS 5.x sem suporte concorrente).
+    $txOk = $false
+    try { Start-Transcript -Path $logFile -Append -ErrorAction Stop | Out-Null; $txOk = $true }
+    catch { Write-Verbose "Transcript da operacao nao iniciado: $($_.Exception.Message)" }
     try {
         if ($ModoSincronizacao -eq "Unilateral") {
             Write-Host "Iniciando cópia unilateral (Origem -> Destino)..."
@@ -264,7 +268,7 @@ function Executar-Robocopy {
         else { Write-Host "Sincronização concluída. Nenhum arquivo precisou ser copiado." -ForegroundColor Green }
     }
     catch { Write-Error "Ocorreu um erro inesperado durante a cópia: $($_.Exception.Message)" }
-    finally { Write-Host "Log de operação detalhado salvo em: $logFile"; Stop-Transcript; Pause-Script }
+    finally { Write-Host "Log de operação detalhado salvo em: $logFile"; if ($txOk) { try { Stop-Transcript | Out-Null } catch { Write-Verbose $_.Exception.Message } }; Pause-Script }
 }
 
 function VerificarEspacoEmDisco {

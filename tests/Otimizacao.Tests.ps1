@@ -53,6 +53,30 @@ Describe 'Get-SyncMasterDataDir' {
     }
 }
 
+Describe 'Start/Stop-SyncMasterLog (transcript de sessao)' {
+    It 'cria um sessao_*.log no data dir e fecha com footer' {
+        $old = $env:SYNCMASTER_DATA_DIR
+        try {
+            $env:SYNCMASTER_DATA_DIR = Join-Path $TestDrive 'logdata'
+            $p = Start-SyncMasterLog
+            try {
+                $p | Should -Not -BeNullOrEmpty
+                Test-Path $p | Should -BeTrue
+                Split-Path $p -Leaf | Should -BeLike 'sessao_*.log'
+            } finally { Stop-SyncMasterLog }
+            (Get-Content $p -Raw) | Should -Match 'transcript end'
+        } finally { $env:SYNCMASTER_DATA_DIR = $old }
+    }
+    It 'Start e idempotente (nao abre 2 transcripts)' {
+        $old = $env:SYNCMASTER_DATA_DIR
+        try {
+            $env:SYNCMASTER_DATA_DIR = Join-Path $TestDrive 'logdata2'
+            $p1 = Start-SyncMasterLog
+            try { $p2 = Start-SyncMasterLog; $p2 | Should -Be $p1 } finally { Stop-SyncMasterLog }
+        } finally { $env:SYNCMASTER_DATA_DIR = $old }
+    }
+}
+
 Describe 'Ensure-Dir' {
     It 'cria o diretorio (inclusive aninhado)' {
         $p = Join-Path $TestDrive 'a\b\c'

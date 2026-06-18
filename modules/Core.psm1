@@ -47,6 +47,36 @@ function Registrar-Log($msg) {
     Add-Content -Path $log -Value $linha
 }
 
+# Transcript de SESSAO: captura TUDO que aparece no console (menus, saidas, erros)
+# num arquivo cronologico no data dir (Logs/sessao_*.log). Complementa o log diario
+# estruturado (Registrar-Log). Best-effort: nunca derruba o script se falhar.
+$script:SessionTranscript = $null
+function Start-SyncMasterLog {
+    [CmdletBinding()]
+    param()
+    if ($script:SessionTranscript) { return $script:SessionTranscript }  # ja iniciado
+    $path = Join-Path (Get-SyncMasterDataDir -SubPasta 'Logs') ("sessao_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
+    try {
+        Start-Transcript -Path $path -Append -ErrorAction Stop | Out-Null
+        $script:SessionTranscript = $path
+        Registrar-Log "=== Sessao iniciada (transcript: $path) ==="
+        return $path
+    } catch {
+        Write-Verbose "Transcript de sessao nao iniciado: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+# Encerra o transcript de sessao (footer). Idempotente; tolerante a falha.
+function Stop-SyncMasterLog {
+    [CmdletBinding()]
+    param()
+    if (-not $script:SessionTranscript) { return }
+    Registrar-Log "=== Sessao encerrada ==="
+    try { Stop-Transcript -ErrorAction Stop | Out-Null } catch { Write-Verbose $_.Exception.Message }
+    $script:SessionTranscript = $null
+}
+
 # Abre o log mais recente no Notepad.
 function Visualizar-Logs {
     $logFile = Get-ChildItem -Path $script:LogsDir -Filter *.txt |
@@ -81,4 +111,4 @@ function Require-Admin {
     }
 }
 
-Export-ModuleMember -Function Get-SyncMasterDataDir, Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin
+Export-ModuleMember -Function Get-SyncMasterDataDir, Start-SyncMasterLog, Stop-SyncMasterLog, Pause-Script, Confirm-Action, Registrar-Log, Visualizar-Logs, Ensure-Dir, Test-IsAdmin, Require-Admin

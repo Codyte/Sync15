@@ -143,6 +143,12 @@ try {
     exit 1
 }
 
+# LOG DE TUDO: transcript de sessao (grava cronologicamente TODO o console no data dir,
+# Logs/sessao_*.log) + footer garantido em qualquer saida (inclusive 'exit') via evento
+# de encerramento do engine. Complementa o log diario estruturado (Registrar-Log).
+$null = Start-SyncMasterLog
+$null = Register-EngineEvent -SourceIdentifier ([System.Management.Automation.PsEngineEvent]::Exiting) -SupportEvent -Action { Stop-SyncMasterLog }
+
 
 # Funcoes utilitarias base (Pause-Script, Confirm-Action, Registrar-Log,
 # Visualizar-Logs, Ensure-Dir) foram extraidas para modules/Core.psm1.
@@ -1326,6 +1332,7 @@ switch ($Acao.ToUpper()) {
             Write-Host "======================================================" -ForegroundColor DarkGray
             
             $escolha = Read-Host "Digite sua escolha e pressione Enter"
+            Registrar-Log "Menu principal: opcao '$escolha'"
 
             switch ($escolha.ToUpper()) {
                 '1'  { Iniciar-Sincronizacao }

@@ -132,13 +132,21 @@ if ($child -and -not $child.HasExited) {
 $env:SYNCMASTER_ENTRY = $PSCommandPath
 
 $modulesDir = Join-Path $PSScriptRoot 'modules'
+$manifesto  = Join-Path $PSScriptRoot 'SyncMaster.psd1'
 try {
-    Import-Module (Join-Path $modulesDir 'Core.psm1') -Force -DisableNameChecking -ErrorAction Stop
-    Get-ChildItem -Path $modulesDir -Filter '*.psm1' |
-        Where-Object Name -ne 'Core.psm1' |
-        ForEach-Object { Import-Module $_.FullName -Force -DisableNameChecking -ErrorAction Stop }
+    if (Test-Path $manifesto) {
+        # Fase A: ponto de entrada unico e versionado. Carrega Core + dominios e exporta
+        # tudo (ver FunctionsToExport no .psd1). Core vem 1o nos NestedModules.
+        Import-Module $manifesto -Force -DisableNameChecking -ErrorAction Stop
+    } else {
+        # Fallback (manifesto ausente): varredura manual, Core primeiro.
+        Import-Module (Join-Path $modulesDir 'Core.psm1') -Force -DisableNameChecking -ErrorAction Stop
+        Get-ChildItem -Path $modulesDir -Filter '*.psm1' |
+            Where-Object Name -ne 'Core.psm1' |
+            ForEach-Object { Import-Module $_.FullName -Force -DisableNameChecking -ErrorAction Stop }
+    }
 } catch {
-    Write-Error "Falha ao carregar modulos de '$modulesDir': $($_.Exception.Message)"
+    Write-Error "Falha ao carregar modulos (manifesto '$manifesto' / pasta '$modulesDir'): $($_.Exception.Message)"
     Read-Host "Pressione Enter para fechar."
     exit 1
 }
@@ -1282,7 +1290,7 @@ if ($latestVersionString) {
     if ($currentVersion -lt $latestVersion) {
         Write-Host "Sua versão ($currentVersion) está desatualizada. A mais recente é $latestVersion." -ForegroundColor Yellow
         $resp = Read-Host "Deseja abrir o menu de atualização? (S/N)"
-        if($resp.ToUpper() -eq 'S'){
+        if($resp -and $resp.ToUpper() -eq 'S'){
             Menu-AtualizacaoPowerShell
         }
     }

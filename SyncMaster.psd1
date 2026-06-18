@@ -1,0 +1,63 @@
+﻿# SyncMaster.psd1 — manifesto do modulo (Fase A do refator).
+# Empacota todos os modulos de dominio num unico ponto de entrada versionado:
+#   Import-Module .\SyncMaster.psd1   ->   carrega Core + dominios, exporta as funcoes abaixo.
+# Core vem primeiro em NestedModules (dependencia dos demais). O launcher Sync_MasterV15.ps1
+# pode importar este manifesto em vez de varrer modules\*.psm1 manualmente.
+@{
+    RootModule        = ''
+    ModuleVersion     = '15.0.0'
+    GUID              = 'b7bf2716-92f9-49ea-b346-31befc2c5630'
+    Author            = 'Eng. Carlos Ortiz'
+    CompanyName       = 'Codyte'
+    Copyright         = '(c) Eng. Carlos Ortiz. Todos os direitos reservados.'
+    Description       = 'Super Ferramenta de Engenharia — sincronizacao, backup, otimizacao e diagnostico Windows.'
+    PowerShellVersion = '5.1'
+
+    # Core primeiro: os modulos de dominio dependem de Registrar-Log/Test-IsAdmin/etc.
+    NestedModules = @(
+        'modules\Core.psm1',
+        'modules\Otimizacao.psm1',
+        'modules\Sync.psm1',
+        'modules\Backup.psm1',
+        'modules\Arquivos.psm1',
+        'modules\Hardware.psm1',
+        'modules\Rede.psm1',
+        'modules\Ativacao.psm1',
+        'modules\PowerShellUpdate.psm1'
+    )
+
+    FunctionsToExport = @(
+        # Core
+        'Get-SyncMasterDataDir','Start-SyncMasterLog','Stop-SyncMasterLog','Pause-Script',
+        'Confirm-Action','Registrar-Log','Visualizar-Logs','Ensure-Dir','Test-IsAdmin','Require-Admin',
+        # Otimizacao
+        'Pause-Local','Is-ServerOS','Set-DWord','Backup-Registro','Show-Estado','Toggle-PowerPlan',
+        'Clean-Temp','Get-Startups','Parse-Selection','Disable-StartupByNumber','Enable-StartupByNumber',
+        'Menu-Startups','Storage-Maintenance','Disk-SMART','Power-CPU-Tune','SearchIndexer-Toggle','Tasks-Noise',
+        # Sync
+        'Salvar-Diretorios','Menu-GerenciamentoDiretorios','Selecionar-DiretorioDaLista','ObterCaminhoPasta',
+        'Iniciar-Sincronizacao','Executar-Robocopy','VerificarEspacoEmDisco','ObterModoSincronizacao',
+        'Resolve-ShareToDiskInfoV2','VerificarEspacoEmDiscoV2','Get-TamanhoPastaBytesV2','Comparar-EspacoVsOrigemV2',
+        'Get-RobocopyArgs','Get-RobocopyStatus','Start-RobocopyUnilateralSeguro','Start-RobocopyEspelho',
+        'Simular-RobocopyUnilateral','Executar-RobocopyUnilateral','Iniciar-SincronizacaoV2','Agendar-TarefaSincronizacao',
+        # Backup
+        'Get-ZipBackupPath','Invoke-ZipBackup','Invoke-ZipRestore','Criar-BackupZIP','Restaurar-BackupZIP','Clonar-Disco',
+        # Arquivos
+        'Remove-ToRecycleBin','Menu-GerenciamentoArquivos','Encontrar-ArquivosDuplicados',
+        'Verificar-IntegridadeArquivos','Permissoes-Pasta',
+        # Hardware
+        'Get-CpuRapido','Get-MemUsoMB','Get-DiscosInfo','Monitorar-Recursos','Diagnostico-Hardware','Get-CpuUsageRobusto',
+        # Rede
+        'Menu-DiagnosticoRede','Test-TcpPort','Testar-PortaTCP','Ping-Sweep','Scan-PortasTCP','Scan-ARP',
+        'Descobrir-Hostnames','Whois-Lookup','Scan-Servicos','Mostrar-Netstat','Instalar-e-Testar-Speedtest',
+        'Menu-Rede','Configurar-TcpAutoTuning','Otimizar-QoS',
+        # Ativacao
+        'Menu-Ativacao','Mostrar-StatusAtivacao','Instalar-ChaveProduto','Ativar-Windows','Ativar-Crack',
+        # PowerShellUpdate
+        'Get-LatestPowerShellVersion','Start-PowerShellInstallation','Get-InstallerInfo','Menu-AtualizacaoPowerShell'
+    )
+
+    AliasesToExport = @('Clear-Temp','Switch-PowerPlan','Restore-PontoRestauracao')
+    CmdletsToExport = @()
+    VariablesToExport = @()
+}

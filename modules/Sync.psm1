@@ -506,7 +506,12 @@ function Format-RobocopyResumo {
     #>
     [CmdletBinding()]
     [OutputType([string])]
-    param([Parameter(Mandatory=$true)][AllowEmptyCollection()][string[]]$Linhas)
+    param(
+        # NAO Mandatory: em [string[]], Mandatory rejeita $null/''/@('') (linhas em branco do log
+        # lido antes do flush do robocopy) com "empty string". Toleramos e devolvemos $null.
+        [AllowNull()][AllowEmptyString()][AllowEmptyCollection()][string[]]$Linhas = @()
+    )
+    if (-not $Linhas -or $Linhas.Count -eq 0) { return $null }
 
     $rows = @(); $idxBytes = -1
     for ($i = 0; $i -lt $Linhas.Count; $i++) {

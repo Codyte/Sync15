@@ -32,13 +32,26 @@ function Pause-Local { Pause-Script }
         $date = Get-Date -Format "yyyyMMdd_HHmmss"
         $dir  = Join-Path $env:USERPROFILE "Desktop\RegBackup_$date"
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        reg export "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "$dir\MemoryManagement.reg" /y | Out-Null
-        reg export "HKLM\SYSTEM\CurrentControlSet\Control\Power" "$dir\Power.reg" /y | Out-Null
-        reg export "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" "$dir\PriorityControl.reg" /y | Out-Null
-        reg export "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "$dir\DataCollection.reg" /y | Out-Null
-        reg export "HKCU\Control Panel\Desktop" "$dir\Desktop.reg" /y | Out-Null
+        # reg.exe e nativo: exit != 0 NAO lanca, entao checamos $LASTEXITCODE por chave.
+        # Algumas chaves (ex.: policy DataCollection) podem nem existir num host nao gerenciado;
+        # acumulamos as falhas e avisamos em vez de fingir backup completo (Set-DWord confia nisto).
+        $exports = @(
+            @{Key='HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management'; File='MemoryManagement.reg'},
+            @{Key='HKLM\SYSTEM\CurrentControlSet\Control\Power';                              File='Power.reg'},
+            @{Key='HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl';                    File='PriorityControl.reg'},
+            @{Key='HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection';                  File='DataCollection.reg'},
+            @{Key='HKCU\Control Panel\Desktop';                                               File='Desktop.reg'}
+        )
+        $falhas = @()
+        foreach ($e in $exports) {
+            reg export $e.Key (Join-Path $dir $e.File) /y | Out-Null
+            if ($LASTEXITCODE -ne 0) { $falhas += $e.Key }
+        }
+        if ($falhas.Count) {
+            Write-Warning ("reg export falhou em {0} chave(s) (pode nao existir neste host): {1}" -f $falhas.Count, ($falhas -join '; '))
+        }
         Write-Host ("Backup salvo em: {0}" -f $dir) -ForegroundColor Cyan
-        Registrar-Log ("Backup-Registro -> {0}" -f $dir)
+        Registrar-Log ("Backup-Registro -> {0} (falhas: {1})" -f $dir, $falhas.Count)
     }
     function Show-Estado {
         $mmPath   = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
@@ -77,8 +90,14 @@ function Pause-Local { Pause-Script }
             try { Remove-Item -Path $p -Recurse -Force -ErrorAction SilentlyContinue } catch { Write-Verbose $_.Exception.Message }
         }
         try {
+            # Dism.exe e nativo: exit != 0 NAO lanca. O catch so pega Dism.exe ausente;
+            # o resultado real vem do $LASTEXITCODE (senao "concluida" mentia em falha).
             Dism.exe /Online /Cleanup-Image /StartComponentCleanup | Out-Null
-            Write-Host "Limpeza concluída (TEMP e Component Store)." -ForegroundColor Green
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Limpeza concluída (TEMP e Component Store)." -ForegroundColor Green
+            } else {
+                Write-Warning ("DISM retornou código {0} — Component Store NÃO limpo (TEMP já foi limpo)." -f $LASTEXITCODE)
+            }
         } catch {
             Write-Warning ("DISM falhou: {0}" -f $_.Exception.Message)
         }

@@ -442,11 +442,16 @@ function Verificar-IntegridadeArquivos {
     Write-Host "Calculando hashes SHA256 para todos os arquivos em '$pasta'. Isso pode demorar..." -ForegroundColor Yellow
     
     try {
-        $hashes = Get-ChildItem $pasta -Recurse -File | Get-FileHash -Algorithm SHA256
+        # SilentlyContinue: 1 arquivo travado/sem acesso nao aborta o relatorio inteiro.
+        $hashes = @(Get-ChildItem $pasta -Recurse -File -ErrorAction SilentlyContinue | Get-FileHash -Algorithm SHA256 -ErrorAction SilentlyContinue)
+        if ($hashes.Count -eq 0) {
+            Write-Warning "Nenhum arquivo legível encontrado em '$pasta'. Nada a gerar."
+            Pause-Script; return
+        }
         $arquivoHash = Join-Path (Get-SyncMasterDataDir -SubPasta 'Relatorios') ("Integridade_" + (Split-Path $pasta -Leaf) + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".csv")
         $hashes | Export-Csv -Path $arquivoHash -NoTypeInformation -Encoding UTF8
-        Write-Host "Relatório de hashes de integridade gerado com sucesso em: $arquivoHash" -ForegroundColor Green
-        Registrar-Log "Verificação de integridade gerada para '$pasta'."
+        Write-Host ("Relatório de hashes ({0} arquivos) gerado com sucesso em: {1}" -f $hashes.Count, $arquivoHash) -ForegroundColor Green
+        Registrar-Log "Verificação de integridade gerada para '$pasta' ($($hashes.Count) arquivos)."
     } catch {
         Write-Warning "Ocorreu um erro ao gerar os hashes: $($_.Exception.Message)"
     }
@@ -468,9 +473,15 @@ function Permissoes-Pasta {
         
         if ($permissao.ToUpper() -in 'F', 'M', 'RX') {
             try {
-                icacls $pasta /grant "$($novoUser):($permissao)" /T # O /T aplica recursivamente
-                Write-Host "Permissão aplicada com sucesso!" -ForegroundColor Green
-                Registrar-Log "Permissão '$permissao' aplicada para '$novoUser' em '$pasta'"
+                # icacls e' nativo: erro (usuario inexistente, acesso negado) NAO lanca -> decide por $LASTEXITCODE,
+                # senao imprimia "sucesso" mesmo falhando. /T aplica recursivamente.
+                icacls $pasta /grant "$($novoUser):($permissao)" /T
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "Falha ao aplicar permissão (icacls exit $LASTEXITCODE). Verifique o usuário/grupo e execute como Administrador."
+                } else {
+                    Write-Host "Permissão aplicada com sucesso!" -ForegroundColor Green
+                    Registrar-Log "Permissão '$permissao' aplicada para '$novoUser' em '$pasta'"
+                }
             } catch {
                 Write-Warning "Falha ao aplicar permissão: $($_.Exception.Message)"
             }

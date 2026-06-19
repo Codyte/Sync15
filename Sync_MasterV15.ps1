@@ -1141,8 +1141,16 @@ function Criar-App {
         return
     }
 
-    # Arquivo de origem (o próprio script) e saída
-    $scriptPath = $MyInvocation.MyCommand.Path
+    # Arquivo de origem (o próprio script) e saída.
+    # $MyInvocation.MyCommand.Path e' NULO dentro de uma funcao (reflete a invocacao da
+    # funcao, nao do script) -> ChangeExtension($null) lanca e -inputFile fica vazio.
+    # $PSCommandPath e' o caminho do .ps1 em execucao; fallback p/ a entry exposta no topo.
+    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $env:SYNCMASTER_ENTRY }
+    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+        Write-Error "Não foi possível resolver o caminho do script para compilar."
+        Pause-Script
+        return
+    }
     $outputFile = [System.IO.Path]::ChangeExtension($scriptPath, ".exe")
 
     Write-Host "`n--- COMPILANDO SCRIPT ---" -ForegroundColor Cyan
@@ -1226,7 +1234,8 @@ function Executor {
     # 2) Calcula SHA256 do conteudo baixado
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($script)
     $sha   = [System.Security.Cryptography.SHA256]::Create()
-    $hash  = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()
+    try   { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose() }   # SHA256::Create() e' IDisposable
     Write-Host ("Tamanho: {0:N0} bytes | SHA256: {1}" -f $bytes.Length, $hash) -ForegroundColor Cyan
 
     # 3) Pin opcional: se um hash esperado foi informado, exige correspondencia

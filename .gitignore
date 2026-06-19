@@ -15,4 +15,4 @@ SyncMaster-Flow/
 SyncMaster-FunctionAudit/
 
 # Atalhos binarios (gerados por Create-*Shortcut.ps1)
-*.lnk
+#*.lnk

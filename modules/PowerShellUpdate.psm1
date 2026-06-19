@@ -34,6 +34,33 @@ function Get-LatestPowerShellVersion {
     }
 }
 
+function Invoke-WingetInstall {
+    <#
+      .SYNOPSIS  Instala/atualiza um pacote via winget tratando ausencia E codigo de saida.
+      .DESCRIPTION  winget e exe nativo: exit code != 0 NAO lanca excecao, entao um try/catch
+        nunca pegaria a falha. Aqui: 1) checa se winget existe (senao $false p/ fallback);
+        2) inclui --accept-source-agreements (1o uso prompta o aceite da fonte e travaria o
+        menu); 3) decide pelo $LASTEXITCODE. Devolve $true so em sucesso real.
+      .OUTPUTS  [bool]
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory=$true)][string]$PackageId)
+
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Warning "winget não encontrado. Tentando download manual..."
+        return $false
+    }
+    Write-Host "Usando winget para instalar/atualizar '$PackageId'..." -ForegroundColor Yellow
+    winget install --id $PackageId -e --source winget --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "winget concluído com sucesso." -ForegroundColor Green
+        return $true
+    }
+    Write-Warning ("winget retornou código {0}. Tentando download manual..." -f $LASTEXITCODE)
+    return $false
+}
+
 function Start-PowerShellInstallation {
     [CmdletBinding()]
     param (
@@ -57,7 +84,6 @@ function Start-PowerShellInstallation {
         if ($sig.Status -ne 'Valid' -or $signer -notmatch 'Microsoft') {
             Write-Warning ("Assinatura do instalador NAO confiavel (Status={0}; Signer={1}). ABORTANDO." -f $sig.Status, $signer)
             Remove-Item -LiteralPath $InstallerPath -Force -ErrorAction SilentlyContinue
-            Pause-Script
             return
         }
         Write-Host ("Assinatura válida (Microsoft). Iniciando o instalador..." ) -ForegroundColor Green
@@ -69,7 +95,6 @@ function Start-PowerShellInstallation {
         Write-Warning "Verifique se a versão existe e se o script tem permissões de administrador."
         Write-Host "Consulte todas as versões disponíveis em: https://github.com/PowerShell/PowerShell/releases" -ForegroundColor Blue
     }
-    Pause-Script
 }
 
 function Get-InstallerInfo {
@@ -113,11 +138,7 @@ function Menu-AtualizacaoPowerShell {
 
         switch ($opcao) {
             '1' {
-                Write-Host "Usando winget para instalar/atualizar a versão estável..." -ForegroundColor Yellow
-                try {
-                    winget install --id Microsoft.PowerShell -e --source winget --accept-package-agreements
-                } catch {
-                    Write-Warning "Falha com winget. Tentando download manual..."
+                if (-not (Invoke-WingetInstall -PackageId 'Microsoft.PowerShell')) {
                     $version = Get-LatestPowerShellVersion
                     if ($version) {
                         $installerInfo = Get-InstallerInfo -Version $version
@@ -129,11 +150,7 @@ function Menu-AtualizacaoPowerShell {
                 Pause-Script
             }
             '2' {
-                Write-Host "Tentando instalar a versão Preview via winget..." -ForegroundColor Yellow
-                try {
-                    winget install --id Microsoft.PowerShell.Preview -e --source winget --accept-package-agreements
-                } catch {
-                    Write-Warning "Falha com winget. Tentando download manual da versão Preview..."
+                if (-not (Invoke-WingetInstall -PackageId 'Microsoft.PowerShell.Preview')) {
                     $version = Get-LatestPowerShellVersion -Preview
                     if ($version) {
                         $installerInfo = Get-InstallerInfo -Version $version
@@ -150,13 +167,11 @@ function Menu-AtualizacaoPowerShell {
                     $installerInfo = Get-InstallerInfo -Version $versao
                     if ($installerInfo) {
                         Start-PowerShellInstallation -Version $versao -InstallerUrl $installerInfo.Url -InstallerPath $installerInfo.Path
-                    } else {
-                        Pause-Script
                     }
                 } else {
                     Write-Warning "Formato de versão inválido. Use o formato X.Y.Z."
-                    Pause-Script
                 }
+                Pause-Script
             }
             '4' {
                 Write-Host "Versão atual do PowerShell: $($PSVersionTable.PSVersion.ToString())" -ForegroundColor Cyan
@@ -171,4 +186,4 @@ function Menu-AtualizacaoPowerShell {
     } while ($opcao.ToUpper() -ne 'Q')
 }
 
-Export-ModuleMember -Function Get-LatestPowerShellVersion, Start-PowerShellInstallation, Get-InstallerInfo, Menu-AtualizacaoPowerShell
+Export-ModuleMember -Function Get-LatestPowerShellVersion, Start-PowerShellInstallation, Get-InstallerInfo, Invoke-WingetInstall, Menu-AtualizacaoPowerShell

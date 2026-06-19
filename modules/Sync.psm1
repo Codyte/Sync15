@@ -406,15 +406,18 @@ function Get-RobocopyArgs {
         [switch]$Simular,
         [switch]$PreservarTudo,
         [ValidateRange(1,128)][int]$Threads = 16,   # /MT: cópia é limitada por latência por-arquivo; 16 > 8 em árvores grandes
-        [switch]$Rapido,                            # menos logging por-arquivo (/NDL /NFL): máx. throughput
+        [switch]$Detalhado,                         # /V: lista CADA arquivo no log (auditoria). Padrão = só resumo
         [switch]$IoNaoBufferizado,                  # /J: I/O sem buffer, acelera arquivos grandes (imagens/VMs/ISOs)
         [string[]]$ExcluirDirs,                     # /XD: nomes/caminhos de pasta a pular (ex.: caches de perfil)
         [string[]]$ExcluirArquivos                  # /XF: nomes/wildcards de arquivo a pular (ex.: hives travados)
     )
-    # /NP: sem o medidor de progresso por-arquivo (escrita char-a-char no console/log custa I/O e nada agrega em lote).
-    $comum = @('/R:1','/W:1','/XJ',"/MT:$Threads",'/NP','/TEE',"/LOG+:$LogPath",'/DCOPY:DAT')
-    # /V loga TODO arquivo (inclusive idênticos/skipped) = I/O pesado; em -Rapido troca por só-resumo (/NDL /NFL).
-    if ($Rapido) { $comum += @('/NDL','/NFL') } else { $comum += '/V' }
+    # SEM /TEE: com /MT a saída por-thread se intercala no console (e no transcript de sessão) ->
+    # texto picotado. Gravamos só no /LOG (robocopy serializa cada registro -> arquivo limpo) e o
+    # presenter resume no fim. /BYTES: contadores em bytes crus -> resumo final parseável (sem "2.204 g").
+    # /NP: sem o medidor de progresso por-arquivo (escrita char-a-char custa I/O e nada agrega em lote).
+    $comum = @('/R:1','/W:1','/XJ',"/MT:$Threads",'/NP','/BYTES',"/LOG+:$LogPath",'/DCOPY:DAT')
+    # Padrão = só resumo (/NDL /NFL): log enxuto, nada de flood de arquivos idênticos. -Detalhado volta /V.
+    if ($Detalhado) { $comum += '/V' } else { $comum += @('/NDL','/NFL') }
     if ($IoNaoBufferizado) { $comum += '/J' }
     # /XD e /XF aceitam multiplos alvos apos a flag: pular lixo travado (cache/hive) economiza
     # retries (ERRO 32) e nao copia o que nunca seria dado util de backup.
@@ -478,6 +481,63 @@ function Resolve-RobocopyTuning {
         $motivo = "$FileCount arquivo(s) -> padrao /MT:16"
     }
     [pscustomobject]@{ Threads = $threads; Rapido = $rapido; IoNaoBufferizado = $io; Motivo = $motivo }
+}
+
+function ConvertTo-TamanhoLegivel {
+    <#  .SYNOPSIS  Bytes -> string legivel (GB/MB/KB/B). Funcao PURA.  #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory=$true)][int64]$Bytes)
+    if     ($Bytes -ge 1GB) { '{0:N2} GB' -f ($Bytes / 1GB) }
+    elseif ($Bytes -ge 1MB) { '{0:N1} MB' -f ($Bytes / 1MB) }
+    elseif ($Bytes -ge 1KB) { '{0:N1} KB' -f ($Bytes / 1KB) }
+    else                    { "$Bytes B" }
+}
+
+function Format-RobocopyResumo {
+    <#
+      .SYNOPSIS  Reescreve o resumo final do robocopy numa tabela PT alinhada. Funcao PURA.
+      .DESCRIPTION  A tabela nativa do robocopy colide colunas em PT-BR ("IgnoradaIncompatibilidade")
+        e formata bytes com espaco ("2.204 g") -> ilegivel. Aqui parseamos as 3 linhas de contadores
+        (Dirs/Arquivos/Bytes) por POSICAO (locale-independente): sao as 3 primeiras linhas com 6
+        inteiros — exige /BYTES (bytes crus, sem sufixo). Bytes viram GB/MB legiveis. Devolve $null
+        se nao der pra parsear (ex.: sem /BYTES), e o caller mantem a saida nativa.
+      .OUTPUTS  [string] (multilinha) ou $null
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory=$true)][AllowEmptyCollection()][string[]]$Linhas)
+
+    $rows = @(); $idxBytes = -1
+    for ($i = 0; $i -lt $Linhas.Count; $i++) {
+        if ($Linhas[$i] -match ':\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$') {
+            $rows += ,@([int64]$Matches[1],[int64]$Matches[2],[int64]$Matches[3],[int64]$Matches[4],[int64]$Matches[5],[int64]$Matches[6])
+            $idxBytes = $i
+            if ($rows.Count -ge 3) { break }
+        }
+    }
+    if ($rows.Count -lt 3) { return $null }   # sem /BYTES ou saida inesperada
+    $dirs = $rows[0]; $arqs = $rows[1]; $byts = $rows[2]
+
+    # Tempo total: primeiro hh:mm:ss APOS a linha de bytes (evita pegar o horario do cabecalho).
+    $tempo = $null
+    for ($i = $idxBytes + 1; $i -lt $Linhas.Count; $i++) {
+        if ($Linhas[$i] -match '(\d+:\d{2}:\d{2})') { $tempo = $Matches[1]; break }
+    }
+
+    $fmt = '{0,-12}{1,11}{2,11}{3,11}{4,11}{5,11}'
+    $sb  = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('──────────────────────────── Resumo ────────────────────────────')
+    [void]$sb.AppendLine(($fmt -f '', 'Total', 'Copiado', 'Ignorado', 'FALHA', 'Extra'))
+    [void]$sb.AppendLine(($fmt -f 'Diretórios:', $dirs[0], $dirs[1], $dirs[2], $dirs[4], $dirs[5]))
+    [void]$sb.AppendLine(($fmt -f 'Arquivos:',   $arqs[0], $arqs[1], $arqs[2], $arqs[4], $arqs[5]))
+    [void]$sb.AppendLine(($fmt -f 'Bytes:',
+        (ConvertTo-TamanhoLegivel $byts[0]), (ConvertTo-TamanhoLegivel $byts[1]),
+        (ConvertTo-TamanhoLegivel $byts[2]), (ConvertTo-TamanhoLegivel $byts[4]),
+        (ConvertTo-TamanhoLegivel $byts[5])))
+    if ($tempo) { [void]$sb.AppendLine("Tempo total: $tempo") }
+    [void]$sb.Append('─────────────────────────────────────────────────────────────────')
+    return $sb.ToString()
 }
 
 function Get-ExclusoesPerfil {
@@ -582,6 +642,32 @@ function Test-ParOrigemDestino {
     return $true
 }
 
+function Show-RobocopyResultado {
+    <#
+      .SYNOPSIS  Lê o log do robocopy e imprime resumo limpo + digest de erros + status final.
+      .DESCRIPTION  Como nao usamos /TEE (evita o texto picotado do /MT), a saida vive no /LOG.
+        Aqui: 1) resumo PT alinhado (Format-RobocopyResumo); 2) contagem de ERRO N (arquivos em
+        uso/sem permissao) sem floodar a tela; 3) mensagem de severidade (Get-RobocopyStatus).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$LogPath,
+        [Parameter(Mandatory=$true)][int]$ExitCode
+    )
+    $linhas = @(Get-Content -LiteralPath $LogPath -ErrorAction SilentlyContinue)
+    $resumo = Format-RobocopyResumo -Linhas $linhas
+    if ($resumo) { Write-Host ''; Write-Host $resumo -ForegroundColor Cyan }
+
+    $erros = @($linhas | Where-Object { $_ -match '(?:ERRO|ERROR)\s+\d+\s' })
+    if ($erros.Count) {
+        Write-Host ("{0} arquivo(s) não copiado(s) (em uso / sem permissão). Detalhes no log." -f $erros.Count) -ForegroundColor Yellow
+    }
+
+    $st = Get-RobocopyStatus -ExitCode $ExitCode
+    if ($st.Severidade -eq 'Erro') { Write-Error ("{0} Veja o log: {1}" -f $st.Mensagem, $LogPath) }
+    else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $LogPath) -ForegroundColor Green }
+}
+
 function Start-RobocopyUnilateralSeguro {
     <#
       .SYNOPSIS  Cópia unilateral (Origem -> Destino) com flags seguras e /dry-run opcional.
@@ -595,7 +681,7 @@ function Start-RobocopyUnilateralSeguro {
         [switch]$PreservarTudo,    # /COPYALL (ACL/owner/auditing) em vez de /COPY:DAT
         [double]$MinLivresGB = 1.0,
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
-        [switch]$Rapido,                            # log só-resumo p/ máx. throughput
+        [switch]$Detalhado,                         # /V: lista por-arquivo no log (default = só resumo)
         [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
         [switch]$SemAutoTune,                       # desliga o auto-tune (usa os valores acima/default)
         [switch]$SemExclusaoPerfil                  # nao auto-exclui lixo travado mesmo se a origem for perfil
@@ -612,11 +698,11 @@ function Start-RobocopyUnilateralSeguro {
 
     # Auto-tune: se o caller NAO fixou nenhum parametro de velocidade, escolhe sozinho a
     # partir do perfil da origem (muitos arquivos pequenos vs poucos grandes). -SemAutoTune opta fora.
-    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('Rapido') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
+    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
     if (-not $SemAutoTune -and $tunavel) {
         $m = Measure-ArvoreRapido -Path $Origem
         $t = Resolve-RobocopyTuning -FileCount $m.FileCount -TotalBytes $m.TotalBytes -MaxFileBytes $m.MaxFileBytes
-        $Threads = $t.Threads; $Rapido = [switch]$t.Rapido; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
+        $Threads = $t.Threads; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
         Write-Host ("Auto-tune: {0}{1}" -f $t.Motivo, $(if($m.Truncado){" (amostra >= $($m.FileCount))"}else{''})) -ForegroundColor DarkCyan
     }
 
@@ -639,16 +725,13 @@ function Start-RobocopyUnilateralSeguro {
 
     # Argumentos via nucleo puro (Get-RobocopyArgs): /COPYALL preserva ACL/owner/auditing
     # (precisa admin); /COPY:DAT evita Owner/SACL.
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo -Threads $Threads -Detalhado:$Detalhado -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
 
-    Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
+    Write-Host "Copiando... (saída por-arquivo vai pro log; resumo ao final)" -ForegroundColor Yellow
     & robocopy @rcArgs
     $rc = $LASTEXITCODE
     Registrar-Log ("Robocopy unilateral {0} {1} -> {2} (rc={3}){4}" -f $copiaDesc, $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
-
-    $st = Get-RobocopyStatus -ExitCode $rc
-    if ($st.Severidade -eq 'Erro') { Write-Error ("{0} Veja o log: {1}" -f $st.Mensagem, $log) }
-    else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $log) -ForegroundColor Green }
+    Show-RobocopyResultado -LogPath $log -ExitCode $rc
 }
 
 function Start-RobocopyEspelho {
@@ -664,7 +747,7 @@ function Start-RobocopyEspelho {
         [switch]$IgnorarEspaco,
         [double]$MinLivresGB = 1.0,
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
-        [switch]$Rapido,                            # log só-resumo p/ máx. throughput
+        [switch]$Detalhado,                         # /V: lista por-arquivo no log (default = só resumo)
         [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
         [switch]$SemAutoTune,                       # desliga o auto-tune (usa os valores acima/default)
         [switch]$SemExclusaoPerfil                  # nao auto-exclui lixo travado mesmo se a origem for perfil
@@ -680,11 +763,11 @@ function Start-RobocopyEspelho {
     if (-not (Test-ParOrigemDestino -Origem $Origem -Destino $Destino)) { return }
 
     # Auto-tune (igual a unilateral): so quando o caller nao fixou parametros de velocidade.
-    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('Rapido') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
+    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
     if (-not $SemAutoTune -and $tunavel) {
         $m = Measure-ArvoreRapido -Path $Origem
         $t = Resolve-RobocopyTuning -FileCount $m.FileCount -TotalBytes $m.TotalBytes -MaxFileBytes $m.MaxFileBytes
-        $Threads = $t.Threads; $Rapido = [switch]$t.Rapido; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
+        $Threads = $t.Threads; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
         Write-Host ("Auto-tune: {0}{1}" -f $t.Motivo, $(if($m.Truncado){" (amostra >= $($m.FileCount))"}else{''})) -ForegroundColor DarkCyan
     }
 
@@ -704,16 +787,13 @@ function Start-RobocopyEspelho {
     }
 
     $log = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular -Threads $Threads -Detalhado:$Detalhado -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
 
-    Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
+    Write-Host "Espelhando... (saída por-arquivo vai pro log; resumo ao final)" -ForegroundColor Yellow
     & robocopy @rcArgs
     $rc = $LASTEXITCODE
     Registrar-Log ("Robocopy ESPELHO /MIR {0} -> {1} (rc={2}){3}" -f $Origem, $Destino, $rc, $(if($Simular){' [SIMULACAO]'}else{''}))
-
-    $st = Get-RobocopyStatus -ExitCode $rc
-    if ($st.Severidade -eq 'Erro') { Write-Error ("{0} Veja o log: {1}" -f $st.Mensagem, $log) }
-    else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $log) -ForegroundColor Green }
+    Show-RobocopyResultado -LogPath $log -ExitCode $rc
 }
 
 function Iniciar-SincronizacaoV2 {
@@ -760,4 +840,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Resolve-RobocopyTuning, Measure-ArvoreRapido, Get-ExclusoesPerfil, Test-OrigemEhPerfil, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Resolve-RobocopyTuning, Measure-ArvoreRapido, ConvertTo-TamanhoLegivel, Format-RobocopyResumo, Show-RobocopyResultado, Get-ExclusoesPerfil, Test-OrigemEhPerfil, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

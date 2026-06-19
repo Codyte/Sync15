@@ -442,6 +442,60 @@ function Get-RobocopyStatus {
     [pscustomobject]@{ ExitCode = $ExitCode; Severidade = $sev; Mensagem = $msg }
 }
 
+function Resolve-RobocopyTuning {
+    <#
+      .SYNOPSIS  Escolhe Threads/Rapido/IoNaoBufferizado a partir do PERFIL da arvore. Funcao PURA.
+      .DESCRIPTION  Heuristica: arquivos grandes => /J + poucas threads (banda/IO domina);
+        muitos arquivos pequenos => -Rapido + muitas threads (latencia por-arquivo domina);
+        caso medio => mais threads que o default. Sem I/O: recebe os numeros ja medidos.
+      .OUTPUTS  PSCustomObject { Threads, Rapido, IoNaoBufferizado, Motivo }
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)][int]$FileCount,
+        [Parameter(Mandatory=$true)][int64]$TotalBytes,
+        [Parameter(Mandatory=$true)][int64]$MaxFileBytes
+    )
+    $avg = if ($FileCount -gt 0) { $TotalBytes / $FileCount } else { 0 }
+    $rapido = $false; $io = $false; $threads = 16
+    if ($MaxFileBytes -ge 4GB -or ($FileCount -gt 0 -and $FileCount -le 100 -and $avg -ge 256MB)) {
+        $io = $true; $threads = 8
+        $motivo = "arquivos grandes (maior {0:N1} GB) -> /J + /MT:8" -f ($MaxFileBytes/1GB)
+    } elseif ($FileCount -ge 5000) {
+        $rapido = $true; $threads = 32
+        $motivo = "muitos arquivos ($FileCount) -> log resumido + /MT:32"
+    } elseif ($FileCount -ge 1000) {
+        $threads = 24
+        $motivo = "$FileCount arquivos -> /MT:24"
+    } else {
+        $motivo = "$FileCount arquivo(s) -> padrao /MT:16"
+    }
+    [pscustomobject]@{ Threads = $threads; Rapido = $rapido; IoNaoBufferizado = $io; Motivo = $motivo }
+}
+
+function Measure-ArvoreRapido {
+    <#
+      .SYNOPSIS  Mede a arvore (contagem/bytes/maior arquivo) com teto p/ nao custar caro.
+      .DESCRIPTION  Uma passada com Get-ChildItem; para em -LimiteArquivos (basta p/ classificar
+        "muitos arquivos"). Robocopy reenumera de qualquer forma; isto so guia o auto-tune.
+      .OUTPUTS  PSCustomObject { FileCount, TotalBytes, MaxFileBytes, Truncado }
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [int]$LimiteArquivos = 20000
+    )
+    $count = 0; $total = [int64]0; $max = [int64]0; $trunc = $false
+    foreach ($f in (Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)) {
+        $count++; $len = [int64]$f.Length; $total += $len
+        if ($len -gt $max) { $max = $len }
+        if ($count -ge $LimiteArquivos) { $trunc = $true; break }
+    }
+    [pscustomobject]@{ FileCount = $count; TotalBytes = $total; MaxFileBytes = $max; Truncado = $trunc }
+}
+
 function Test-ParOrigemDestino {
     <#
       .SYNOPSIS  Valida o par origem/destino antes de qualquer robocopy (guard central).
@@ -494,7 +548,8 @@ function Start-RobocopyUnilateralSeguro {
         [double]$MinLivresGB = 1.0,
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
         [switch]$Rapido,                            # log só-resumo p/ máx. throughput
-        [switch]$IoNaoBufferizado                   # /J (arquivos grandes)
+        [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
+        [switch]$SemAutoTune                        # desliga o auto-tune (usa os valores acima/default)
     )
 
     $copiaDesc = if ($PreservarTudo) { 'COMPLETA (/COPYALL: ACL/owner)' } else { 'segura (/COPY:DAT)' }
@@ -505,6 +560,16 @@ function Start-RobocopyUnilateralSeguro {
     Write-Host "------------------------------------------------" -ForegroundColor Cyan
 
     if (-not (Test-ParOrigemDestino -Origem $Origem -Destino $Destino)) { return }
+
+    # Auto-tune: se o caller NAO fixou nenhum parametro de velocidade, escolhe sozinho a
+    # partir do perfil da origem (muitos arquivos pequenos vs poucos grandes). -SemAutoTune opta fora.
+    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('Rapido') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
+    if (-not $SemAutoTune -and $tunavel) {
+        $m = Measure-ArvoreRapido -Path $Origem
+        $t = Resolve-RobocopyTuning -FileCount $m.FileCount -TotalBytes $m.TotalBytes -MaxFileBytes $m.MaxFileBytes
+        $Threads = $t.Threads; $Rapido = [switch]$t.Rapido; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
+        Write-Host ("Auto-tune: {0}{1}" -f $t.Motivo, $(if($m.Truncado){" (amostra >= $($m.FileCount))"}else{''})) -ForegroundColor DarkCyan
+    }
 
     if (-not $IgnorarEspaco) {
         $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
@@ -544,7 +609,8 @@ function Start-RobocopyEspelho {
         [double]$MinLivresGB = 1.0,
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
         [switch]$Rapido,                            # log só-resumo p/ máx. throughput
-        [switch]$IoNaoBufferizado                   # /J (arquivos grandes)
+        [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
+        [switch]$SemAutoTune                        # desliga o auto-tune (usa os valores acima/default)
     )
 
     Write-Host "------------------------------------------------" -ForegroundColor Red
@@ -555,6 +621,15 @@ function Start-RobocopyEspelho {
     Write-Host "------------------------------------------------" -ForegroundColor Red
 
     if (-not (Test-ParOrigemDestino -Origem $Origem -Destino $Destino)) { return }
+
+    # Auto-tune (igual a unilateral): so quando o caller nao fixou parametros de velocidade.
+    $tunavel = -not ($PSBoundParameters.ContainsKey('Threads') -or $PSBoundParameters.ContainsKey('Rapido') -or $PSBoundParameters.ContainsKey('IoNaoBufferizado'))
+    if (-not $SemAutoTune -and $tunavel) {
+        $m = Measure-ArvoreRapido -Path $Origem
+        $t = Resolve-RobocopyTuning -FileCount $m.FileCount -TotalBytes $m.TotalBytes -MaxFileBytes $m.MaxFileBytes
+        $Threads = $t.Threads; $Rapido = [switch]$t.Rapido; $IoNaoBufferizado = [switch]$t.IoNaoBufferizado
+        Write-Host ("Auto-tune: {0}{1}" -f $t.Motivo, $(if($m.Truncado){" (amostra >= $($m.FileCount))"}else{''})) -ForegroundColor DarkCyan
+    }
 
     if (-not $IgnorarEspaco) {
         $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
@@ -621,4 +696,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Resolve-RobocopyTuning, Measure-ArvoreRapido, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

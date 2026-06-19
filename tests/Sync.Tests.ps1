@@ -118,6 +118,57 @@ Describe 'Test-ParOrigemDestino' {
     }
 }
 
+Describe 'Resolve-RobocopyTuning' {
+    It 'muitos arquivos pequenos => -Rapido + /MT:32' {
+        $t = Resolve-RobocopyTuning -FileCount 6000 -TotalBytes (6000 * 50KB) -MaxFileBytes 1MB
+        $t.Rapido | Should -BeTrue
+        $t.Threads | Should -Be 32
+        $t.IoNaoBufferizado | Should -BeFalse
+    }
+    It 'poucos arquivos grandes (max >= 4GB) => /J + /MT:8' {
+        $t = Resolve-RobocopyTuning -FileCount 3 -TotalBytes 12GB -MaxFileBytes 5GB
+        $t.IoNaoBufferizado | Should -BeTrue
+        $t.Threads | Should -Be 8
+        $t.Rapido | Should -BeFalse
+    }
+    It 'caso medio (>=1000) => /MT:24 sem flags' {
+        $t = Resolve-RobocopyTuning -FileCount 1500 -TotalBytes (1500 * 1MB) -MaxFileBytes 5MB
+        $t.Threads | Should -Be 24
+        $t.Rapido | Should -BeFalse
+        $t.IoNaoBufferizado | Should -BeFalse
+    }
+    It 'arvore pequena => padrao /MT:16' {
+        $t = Resolve-RobocopyTuning -FileCount 12 -TotalBytes (12 * 1MB) -MaxFileBytes 2MB
+        $t.Threads | Should -Be 16
+        $t.Rapido | Should -BeFalse
+        $t.IoNaoBufferizado | Should -BeFalse
+    }
+    It 'arvore vazia nao divide por zero' {
+        { Resolve-RobocopyTuning -FileCount 0 -TotalBytes 0 -MaxFileBytes 0 } | Should -Not -Throw
+    }
+}
+
+Describe 'Measure-ArvoreRapido' {
+    BeforeAll {
+        $script:mDir = Join-Path ([IO.Path]::GetTempPath()) ("measure_" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:mDir -Force | Out-Null
+        Set-Content -Path (Join-Path $script:mDir 'a.txt') -Value ('x' * 100)
+        Set-Content -Path (Join-Path $script:mDir 'b.txt') -Value ('y' * 250)
+    }
+    AfterAll { Remove-Item -LiteralPath $script:mDir -Recurse -Force -ErrorAction SilentlyContinue }
+    It 'conta arquivos e soma bytes' {
+        $m = Measure-ArvoreRapido -Path $script:mDir
+        $m.FileCount | Should -Be 2
+        $m.TotalBytes | Should -BeGreaterThan 0
+        $m.MaxFileBytes | Should -BeGreaterThan 0
+    }
+    It 'respeita o teto -LimiteArquivos (Truncado)' {
+        $m = Measure-ArvoreRapido -Path $script:mDir -LimiteArquivos 1
+        $m.FileCount | Should -Be 1
+        $m.Truncado | Should -BeTrue
+    }
+}
+
 Describe 'Get-RobocopyStatus' {
     It 'exit 0 => SemMudancas' {
         (Get-RobocopyStatus -ExitCode 0).Severidade | Should -Be 'SemMudancas'

@@ -87,8 +87,15 @@ function Start-PowerShellInstallation {
             return
         }
         Write-Host ("Assinatura válida (Microsoft). Iniciando o instalador..." ) -ForegroundColor Green
-        Start-Process msiexec.exe -ArgumentList "/i `"$InstallerPath`"" -Wait
-        Write-Host "Instalação da versão $Version concluída!" -ForegroundColor Green
+        # -PassThru p/ ler o ExitCode: msiexec nao seta $LASTEXITCODE e sem isto a falha/cancelamento
+        # (1602/1603) passava como "concluida". 0 = ok; 3010 = ok mas exige reinicio.
+        $proc = Start-Process msiexec.exe -ArgumentList "/i `"$InstallerPath`"" -Wait -PassThru
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            $reinicio = if ($proc.ExitCode -eq 3010) { ' (reinício pendente para concluir)' } else { '' }
+            Write-Host ("Instalação da versão $Version concluída!$reinicio") -ForegroundColor Green
+        } else {
+            Write-Warning ("Instalador msiexec retornou código {0} — instalação NÃO concluída. Execute como Administrador e tente novamente." -f $proc.ExitCode)
+        }
     }
     catch {
         Write-Warning "Falha ao baixar ou instalar o PowerShell $Version."

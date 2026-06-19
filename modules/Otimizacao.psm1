@@ -386,13 +386,13 @@ function Menu-Startups {
         switch ($choice.ToUpper()) {
             'D' {
                 $sel = Read-Host "Informe números (ex.: 1 3 5-7)"
-                $idx = Parse-Selection -Input $sel -Max $list.Count
+                $idx = Parse-Selection -Selection $sel -Max $list.Count
                 if ($idx.Count -gt 0) { Disable-StartupByNumber -Indexes $idx }
                 Pause-Local
             }
             'R' {
                 $sel = Read-Host "Informe números (ex.: 2 4 10-12)"
-                $idx = Parse-Selection -Input $sel -Max $list.Count
+                $idx = Parse-Selection -Selection $sel -Max $list.Count
                 if ($idx.Count -gt 0) { Enable-StartupByNumber -Indexes $idx }
                 Pause-Local
             }
@@ -539,8 +539,8 @@ function Menu-Startups {
         Write-Host "A) Desabilitar por número   B) Habilitar por número   Q) Voltar"
         $ans = Read-Host "Escolha"
         switch ($ans.ToUpper()) {
-            'A' { $n= [int](Read-Host "Número"); if ($map[$n]) { Disable-ScheduledTask -InputObject $map[$n] | Out-Null; Write-Host "Desabilitada." -ForegroundColor Yellow; Pause-Local } }
-            'B' { $n= [int](Read-Host "Número"); if ($map[$n]) { Enable-ScheduledTask  -InputObject $map[$n] | Out-Null; Write-Host "Habilitada."  -ForegroundColor Green;  Pause-Local } }
+            'A' { $ns = Read-Host "Número"; if ($ns -match '^\d+$' -and $map[[int]$ns]) { Disable-ScheduledTask -InputObject $map[[int]$ns] | Out-Null; Write-Host "Desabilitada." -ForegroundColor Yellow } else { Write-Warning "Número inválido." }; Pause-Local }
+            'B' { $ns = Read-Host "Número"; if ($ns -match '^\d+$' -and $map[[int]$ns]) { Enable-ScheduledTask  -InputObject $map[[int]$ns] | Out-Null; Write-Host "Habilitada."  -ForegroundColor Green  } else { Write-Warning "Número inválido." }; Pause-Local }
             default { return }
         }
     }

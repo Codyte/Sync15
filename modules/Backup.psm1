@@ -90,7 +90,21 @@ function Criar-BackupZIP {
 function Restaurar-BackupZIP {
     # Lista os ZIPs do data dir de backups (mesmo local onde Criar-BackupZIP grava).
     $bkpDir = Get-SyncMasterDataDir -SubPasta 'Backups'
-    $zip = Get-ChildItem -Path $bkpDir -Filter *.zip -ErrorAction SilentlyContinue | Out-GridView -Title "Escolha o arquivo ZIP para restaurar" -PassThru
+    $zips = @(Get-ChildItem -Path $bkpDir -Filter *.zip -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+    if ($zips.Count -eq 0) { Write-Host "Nenhum ZIP encontrado em: $bkpDir."; Pause-Script; return }
+    # Out-GridView nao existe em Server Core / hosts sem GUI: cai numa lista numerada.
+    $zip = $null
+    try {
+        $zip = $zips | Out-GridView -Title "Escolha o arquivo ZIP para restaurar" -PassThru
+    } catch {
+        Write-Verbose "Out-GridView indisponivel: $($_.Exception.Message)"
+        Write-Host "--- BACKUPS DISPONÍVEIS ---" -ForegroundColor Cyan
+        for ($i = 0; $i -lt $zips.Count; $i++) {
+            Write-Host ('{0,3}. {1}  ({2:yyyy-MM-dd HH:mm})' -f ($i+1), $zips[$i].Name, $zips[$i].LastWriteTime)
+        }
+        $sel = Read-Host "Número do ZIP a restaurar (Enter cancela)"
+        if ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $zips.Count) { $zip = $zips[[int]$sel - 1] }
+    }
     if (-not $zip) { Write-Host "Nenhum ZIP selecionado (procurados em: $bkpDir)."; Pause-Script; return }
     $destinoObj = Selecionar-DiretorioDaLista -Titulo "Selecione o DESTINO para RESTAURAR backup ZIP"
     if (-not $destinoObj) { Write-Host "Operação cancelada."; Pause-Script; return }

@@ -407,13 +407,19 @@ function Get-RobocopyArgs {
         [switch]$PreservarTudo,
         [ValidateRange(1,128)][int]$Threads = 16,   # /MT: cópia é limitada por latência por-arquivo; 16 > 8 em árvores grandes
         [switch]$Rapido,                            # menos logging por-arquivo (/NDL /NFL): máx. throughput
-        [switch]$IoNaoBufferizado                   # /J: I/O sem buffer, acelera arquivos grandes (imagens/VMs/ISOs)
+        [switch]$IoNaoBufferizado,                  # /J: I/O sem buffer, acelera arquivos grandes (imagens/VMs/ISOs)
+        [string[]]$ExcluirDirs,                     # /XD: nomes/caminhos de pasta a pular (ex.: caches de perfil)
+        [string[]]$ExcluirArquivos                  # /XF: nomes/wildcards de arquivo a pular (ex.: hives travados)
     )
     # /NP: sem o medidor de progresso por-arquivo (escrita char-a-char no console/log custa I/O e nada agrega em lote).
     $comum = @('/R:1','/W:1','/XJ',"/MT:$Threads",'/NP','/TEE',"/LOG+:$LogPath",'/DCOPY:DAT')
     # /V loga TODO arquivo (inclusive idênticos/skipped) = I/O pesado; em -Rapido troca por só-resumo (/NDL /NFL).
     if ($Rapido) { $comum += @('/NDL','/NFL') } else { $comum += '/V' }
     if ($IoNaoBufferizado) { $comum += '/J' }
+    # /XD e /XF aceitam multiplos alvos apos a flag: pular lixo travado (cache/hive) economiza
+    # retries (ERRO 32) e nao copia o que nunca seria dado util de backup.
+    if ($ExcluirDirs)     { $comum += '/XD'; $comum += $ExcluirDirs }
+    if ($ExcluirArquivos) { $comum += '/XF'; $comum += $ExcluirArquivos }
     if ($Modo -eq 'Espelho') {
         $rcArgs = @($Origem, $Destino, '/MIR', '/COPYALL') + $comum
     } else {
@@ -472,6 +478,48 @@ function Resolve-RobocopyTuning {
         $motivo = "$FileCount arquivo(s) -> padrao /MT:16"
     }
     [pscustomobject]@{ Threads = $threads; Rapido = $rapido; IoNaoBufferizado = $io; Motivo = $motivo }
+}
+
+function Get-ExclusoesPerfil {
+    <#
+      .SYNOPSIS  Lista de lixo travado/inutil de um perfil Windows p/ robocopy /XD e /XF. Funcao PURA.
+      .DESCRIPTION  Hives vivos (NTUSER.DAT, UsrClass.dat e seus *.LOG1/2), caches de browser/SO e
+        temporarios: sempre em uso (ERRO 32) e sem valor de backup. Nomes "soltos" em /XD casam a
+        pasta em qualquer nivel; wildcards em /XF casam por nome de arquivo.
+      .OUTPUTS  PSCustomObject { Dirs[], Arquivos[] }
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param()
+    [pscustomobject]@{
+        Dirs = @(
+            'Temp','Cache','Caches','Code Cache','GPUCache','CacheStorage','DXCache','GLCache',
+            'ShaderCache','INetCache','WebCache','$RECYCLE.BIN','System Volume Information'
+        )
+        Arquivos = @(
+            'NTUSER.DAT*','ntuser.dat*','UsrClass.dat*','*.LOG1','*.LOG2',
+            '*.tmp','*.etl','index.dat','WebCacheV01.dat'
+        )
+    }
+}
+
+function Test-OrigemEhPerfil {
+    <#
+      .SYNOPSIS  True se a origem e a raiz de perfis (C:\Users), um perfil, ou contem um hive NTUSER.DAT.
+      .DESCRIPTION  Guia o auto-exclude de lixo: so liga as exclusoes de perfil quando a origem
+        realmente e um perfil de usuario; copias comuns ficam intactas.
+      .OUTPUTS  [bool]
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory=$true)][string]$Path)
+    $sep = [IO.Path]::DirectorySeparatorChar
+    $p   = $Path.TrimEnd('\','/')
+    $usersRoot = (Join-Path $env:SystemDrive 'Users').TrimEnd('\')
+    if ($p -ieq $usersRoot) { return $true }                                               # C:\Users
+    if ($p.StartsWith($usersRoot + $sep, [StringComparison]::OrdinalIgnoreCase)) { return $true }  # C:\Users\<...>
+    if (Test-Path -LiteralPath (Join-Path $Path 'NTUSER.DAT')) { return $true }            # qualquer pasta com hive
+    return $false
 }
 
 function Measure-ArvoreRapido {
@@ -549,7 +597,8 @@ function Start-RobocopyUnilateralSeguro {
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
         [switch]$Rapido,                            # log só-resumo p/ máx. throughput
         [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
-        [switch]$SemAutoTune                        # desliga o auto-tune (usa os valores acima/default)
+        [switch]$SemAutoTune,                       # desliga o auto-tune (usa os valores acima/default)
+        [switch]$SemExclusaoPerfil                  # nao auto-exclui lixo travado mesmo se a origem for perfil
     )
 
     $copiaDesc = if ($PreservarTudo) { 'COMPLETA (/COPYALL: ACL/owner)' } else { 'segura (/COPY:DAT)' }
@@ -571,6 +620,13 @@ function Start-RobocopyUnilateralSeguro {
         Write-Host ("Auto-tune: {0}{1}" -f $t.Motivo, $(if($m.Truncado){" (amostra >= $($m.FileCount))"}else{''})) -ForegroundColor DarkCyan
     }
 
+    # Origem = perfil de usuario? Auto-exclui hives travados + caches (ERRO 32 / lixo). -SemExclusaoPerfil opta fora.
+    $exDirs = @(); $exFiles = @()
+    if (-not $SemExclusaoPerfil -and (Test-OrigemEhPerfil -Path $Origem)) {
+        $ex = Get-ExclusoesPerfil; $exDirs = $ex.Dirs; $exFiles = $ex.Arquivos
+        Write-Host ("Origem é perfil de usuário: excluindo lixo travado ({0} pastas / {1} padrões de arquivo)." -f $exDirs.Count, $exFiles.Count) -ForegroundColor DarkCyan
+    }
+
     if (-not $IgnorarEspaco) {
         $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
         if (-not $ok) {
@@ -583,7 +639,7 @@ function Start-RobocopyUnilateralSeguro {
 
     # Argumentos via nucleo puro (Get-RobocopyArgs): /COPYALL preserva ACL/owner/auditing
     # (precisa admin); /COPY:DAT evita Owner/SACL.
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
 
     Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
     & robocopy @rcArgs
@@ -610,7 +666,8 @@ function Start-RobocopyEspelho {
         [ValidateRange(1,128)][int]$Threads = 16,  # /MT
         [switch]$Rapido,                            # log só-resumo p/ máx. throughput
         [switch]$IoNaoBufferizado,                  # /J (arquivos grandes)
-        [switch]$SemAutoTune                        # desliga o auto-tune (usa os valores acima/default)
+        [switch]$SemAutoTune,                       # desliga o auto-tune (usa os valores acima/default)
+        [switch]$SemExclusaoPerfil                  # nao auto-exclui lixo travado mesmo se a origem for perfil
     )
 
     Write-Host "------------------------------------------------" -ForegroundColor Red
@@ -639,8 +696,15 @@ function Start-RobocopyEspelho {
         }
     }
 
+    # Origem = perfil? Auto-exclui lixo travado. Em /MIR o /XD tambem PROTEGE: pasta excluida nao e apagada no destino.
+    $exDirs = @(); $exFiles = @()
+    if (-not $SemExclusaoPerfil -and (Test-OrigemEhPerfil -Path $Origem)) {
+        $ex = Get-ExclusoesPerfil; $exDirs = $ex.Dirs; $exFiles = $ex.Arquivos
+        Write-Host ("Origem é perfil de usuário: excluindo lixo travado ({0} pastas / {1} padrões de arquivo)." -f $exDirs.Count, $exFiles.Count) -ForegroundColor DarkCyan
+    }
+
     $log = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado -ExcluirDirs $exDirs -ExcluirArquivos $exFiles
 
     Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
     & robocopy @rcArgs
@@ -696,4 +760,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Resolve-RobocopyTuning, Measure-ArvoreRapido, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Resolve-RobocopyTuning, Measure-ArvoreRapido, Get-ExclusoesPerfil, Test-OrigemEhPerfil, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

@@ -40,7 +40,7 @@
         # Sync
         'Salvar-Diretorios','Menu-GerenciamentoDiretorios','Selecionar-DiretorioDaLista','ObterCaminhoPasta',
         'Iniciar-Sincronizacao','Resolve-ShareToDiskInfoV2','VerificarEspacoEmDiscoV2','Get-TamanhoPastaBytesV2',
-        'Comparar-EspacoVsOrigemV2','Get-RobocopyArgs','Get-RobocopyStatus','Resolve-RobocopyTuning','Measure-ArvoreRapido','Test-ParOrigemDestino',
+        'Comparar-EspacoVsOrigemV2','Get-RobocopyArgs','Get-RobocopyStatus','Resolve-RobocopyTuning','Measure-ArvoreRapido','Get-ExclusoesPerfil','Test-OrigemEhPerfil','Test-ParOrigemDestino',
         'Start-RobocopyUnilateralSeguro','Start-RobocopyEspelho','Iniciar-SincronizacaoV2','Agendar-TarefaSincronizacao',
         # Backup
         'Get-ZipBackupPath','Invoke-ZipBackup','Invoke-ZipRestore','Criar-BackupZIP','Restaurar-BackupZIP','Clonar-Disco',

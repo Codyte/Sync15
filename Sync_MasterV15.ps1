@@ -1352,8 +1352,16 @@ switch ($Acao.ToUpper()) {
                 Write-Host "Encerrando script. Até logo, Eng. Ortiz." -ForegroundColor Green
                 exit
             }
-            # Despacha pelo nome da funcao (modulo OU definida neste launcher).
-            & $sel.Comando
+            # Despacha pelo nome da funcao (modulo OU definida neste launcher). try/catch isola a
+            # acao: sem isto um throw da leaf (ex.: Require-Admin sem elevacao, ou funcao inexistente)
+            # propagava e DERRUBAVA o loop do menu inteiro — o usuario era chutado do script.
+            try {
+                & $sel.Comando
+            } catch {
+                Write-Warning ("A ação '{0}' falhou: {1}" -f $sel.Comando, $_.Exception.Message)
+                Registrar-Log ("ERRO na acao de menu '{0}': {1}" -f $sel.Comando, $_.Exception.Message)
+                Pause-Script
+            }
         } while ($true)
     }
 

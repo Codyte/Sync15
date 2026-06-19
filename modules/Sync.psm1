@@ -27,7 +27,8 @@ if (Test-Path $script:diretoriosConfigFile) {
 if ($null -eq $script:diretoriosSalvos) { $script:diretoriosSalvos = @() }
 function Salvar-Diretorios {
     try {
-        $script:diretoriosSalvos | ConvertTo-Json -Depth 5 | Set-Content -Path $diretoriosConfigFile
+        # UTF8: sem isto o Set-Content do PS5 grava ANSI e corrompe acentos em Nome/Caminho.
+        $script:diretoriosSalvos | ConvertTo-Json -Depth 5 | Set-Content -Path $diretoriosConfigFile -Encoding UTF8
         return $true
     } catch {
         Write-Warning "ERRO: Não foi possível salvar o arquivo de configuração. $($_.Exception.Message)"
@@ -458,6 +459,15 @@ function Test-ParOrigemDestino {
     $dReal = if (Test-Path -LiteralPath $Destino) { (Convert-Path -LiteralPath $Destino).TrimEnd('\') } else { $Destino.TrimEnd('\') }
     if ($oReal -ieq $dReal) {
         Write-Error "Origem e destino não podem ser o mesmo caminho: $oReal"
+        return $false
+    }
+    # Aninhamento: destino DENTRO da origem (ou vice-versa) faz /MIR e /E copiarem em
+    # recursao/apagarem o que nao deviam. Compara com separador para evitar falso-positivo
+    # de prefixo (ex.: C:\Dados vs C:\Dados2).
+    $sep = [IO.Path]::DirectorySeparatorChar
+    if ($dReal.StartsWith($oReal + $sep, [StringComparison]::OrdinalIgnoreCase) -or
+        $oReal.StartsWith($dReal + $sep, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Error "Origem e destino não podem estar aninhados (um dentro do outro): '$oReal' x '$dReal'."
         return $false
     }
     return $true

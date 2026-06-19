@@ -69,6 +69,22 @@ Describe 'Test-ParOrigemDestino' {
     It 'rejeita origem == destino ignorando barra final/case' {
         Test-ParOrigemDestino -Origem $script:oDir -Destino ($script:oDir.ToUpper() + '\') -ErrorAction SilentlyContinue | Should -BeFalse
     }
+    It 'rejeita destino DENTRO da origem (aninhado)' {
+        $sub = Join-Path $script:oDir 'Backup'
+        Test-ParOrigemDestino -Origem $script:oDir -Destino $sub -ErrorAction SilentlyContinue | Should -BeFalse
+    }
+    It 'rejeita origem DENTRO do destino (aninhado inverso)' {
+        $sub = Join-Path $script:dDir 'Sub'
+        New-Item -ItemType Directory -Path $sub -Force | Out-Null
+        Test-ParOrigemDestino -Origem $sub -Destino $script:dDir -ErrorAction SilentlyContinue | Should -BeFalse
+    }
+    It 'NAO confunde prefixo de nome (Dados vs Dados2)' {
+        $a = Join-Path ([IO.Path]::GetTempPath()) ("syncpar_Dados_"  + [guid]::NewGuid().ToString('N'))
+        $b = "$a`2"
+        New-Item -ItemType Directory -Path $a, $b -Force | Out-Null
+        try { Test-ParOrigemDestino -Origem $a -Destino $b | Should -BeTrue }
+        finally { Remove-Item -LiteralPath $a, $b -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 Describe 'Get-RobocopyStatus' {

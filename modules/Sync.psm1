@@ -404,9 +404,16 @@ function Get-RobocopyArgs {
         [Parameter(Mandatory=$true)][ValidateSet('Unilateral','Espelho')][string]$Modo,
         [Parameter(Mandatory=$true)][string]$LogPath,
         [switch]$Simular,
-        [switch]$PreservarTudo
+        [switch]$PreservarTudo,
+        [ValidateRange(1,128)][int]$Threads = 16,   # /MT: cópia é limitada por latência por-arquivo; 16 > 8 em árvores grandes
+        [switch]$Rapido,                            # menos logging por-arquivo (/NDL /NFL): máx. throughput
+        [switch]$IoNaoBufferizado                   # /J: I/O sem buffer, acelera arquivos grandes (imagens/VMs/ISOs)
     )
-    $comum = @('/R:1','/W:1','/XJ','/MT:8','/V','/TEE',"/LOG+:$LogPath",'/DCOPY:DAT')
+    # /NP: sem o medidor de progresso por-arquivo (escrita char-a-char no console/log custa I/O e nada agrega em lote).
+    $comum = @('/R:1','/W:1','/XJ',"/MT:$Threads",'/NP','/TEE',"/LOG+:$LogPath",'/DCOPY:DAT')
+    # /V loga TODO arquivo (inclusive idênticos/skipped) = I/O pesado; em -Rapido troca por só-resumo (/NDL /NFL).
+    if ($Rapido) { $comum += @('/NDL','/NFL') } else { $comum += '/V' }
+    if ($IoNaoBufferizado) { $comum += '/J' }
     if ($Modo -eq 'Espelho') {
         $rcArgs = @($Origem, $Destino, '/MIR', '/COPYALL') + $comum
     } else {
@@ -484,7 +491,10 @@ function Start-RobocopyUnilateralSeguro {
         [switch]$Simular,          # adiciona /L (lista sem copiar)
         [switch]$IgnorarEspaco,    # pula checagem de espaço
         [switch]$PreservarTudo,    # /COPYALL (ACL/owner/auditing) em vez de /COPY:DAT
-        [double]$MinLivresGB = 1.0
+        [double]$MinLivresGB = 1.0,
+        [ValidateRange(1,128)][int]$Threads = 16,  # /MT
+        [switch]$Rapido,                            # log só-resumo p/ máx. throughput
+        [switch]$IoNaoBufferizado                   # /J (arquivos grandes)
     )
 
     $copiaDesc = if ($PreservarTudo) { 'COMPLETA (/COPYALL: ACL/owner)' } else { 'segura (/COPY:DAT)' }
@@ -508,7 +518,7 @@ function Start-RobocopyUnilateralSeguro {
 
     # Argumentos via nucleo puro (Get-RobocopyArgs): /COPYALL preserva ACL/owner/auditing
     # (precisa admin); /COPY:DAT evita Owner/SACL.
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Unilateral' -LogPath $log -Simular:$Simular -PreservarTudo:$PreservarTudo -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado
 
     Write-Host "Iniciando robocopy..." -ForegroundColor Yellow
     & robocopy @rcArgs
@@ -531,7 +541,10 @@ function Start-RobocopyEspelho {
         [Parameter(Mandatory=$true)][string]$Destino,
         [switch]$Simular,
         [switch]$IgnorarEspaco,
-        [double]$MinLivresGB = 1.0
+        [double]$MinLivresGB = 1.0,
+        [ValidateRange(1,128)][int]$Threads = 16,  # /MT
+        [switch]$Rapido,                            # log só-resumo p/ máx. throughput
+        [switch]$IoNaoBufferizado                   # /J (arquivos grandes)
     )
 
     Write-Host "------------------------------------------------" -ForegroundColor Red
@@ -552,7 +565,7 @@ function Start-RobocopyEspelho {
     }
 
     $log = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath ("robocopy_espelho_{0:yyyy-MM-dd_HH-mm-ss}.log" -f (Get-Date))
-    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular
+    $rcArgs = Get-RobocopyArgs -Origem $Origem -Destino $Destino -Modo 'Espelho' -LogPath $log -Simular:$Simular -Threads $Threads -Rapido:$Rapido -IoNaoBufferizado:$IoNaoBufferizado
 
     Write-Host "Iniciando robocopy (espelho)..." -ForegroundColor Yellow
     & robocopy @rcArgs

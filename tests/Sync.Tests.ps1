@@ -46,6 +46,37 @@ Describe 'Get-RobocopyArgs' {
     It 'rejeita Modo invalido (ValidateSet)' {
         { Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo 'Bilateral' -LogPath 'C:\x.log' } | Should -Throw
     }
+    It 'inclui /NP sempre (sem progresso por-arquivo)' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Contain '/NP'
+    }
+    It 'default usa /MT:16' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Contain '/MT:16'
+    }
+    It '-Threads troca o valor do /MT' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Threads 32
+        $a | Should -Contain '/MT:32'
+        $a | Should -Not -Contain '/MT:16'
+    }
+    It '-Rapido troca /V por /NDL /NFL' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Rapido
+        $a | Should -Contain '/NDL'
+        $a | Should -Contain '/NFL'
+        $a | Should -Not -Contain '/V'
+    }
+    It 'sem -Rapido mantem /V e nao inclui /NDL' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Contain '/V'
+        $a | Should -Not -Contain '/NDL'
+    }
+    It '-IoNaoBufferizado adiciona /J' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -IoNaoBufferizado
+        $a | Should -Contain '/J'
+    }
+    It 'rejeita Threads fora de 1..128 (ValidateRange)' {
+        { Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Threads 0 } | Should -Throw
+    }
 }
 
 Describe 'Test-ParOrigemDestino' {

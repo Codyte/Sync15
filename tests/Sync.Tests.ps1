@@ -74,6 +74,23 @@ Describe 'Get-RobocopyArgs' {
         $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -IoNaoBufferizado
         $a | Should -Contain '/J'
     }
+    It '-ExcluirDirs injeta /XD seguido dos nomes' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -ExcluirDirs 'Temp','Cache'
+        $a | Should -Contain '/XD'
+        $a | Should -Contain 'Temp'
+        $a | Should -Contain 'Cache'
+        ($a -join ' ') | Should -Match '/XD Temp Cache'
+    }
+    It '-ExcluirArquivos injeta /XF seguido dos padroes' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -ExcluirArquivos 'NTUSER.DAT*','*.tmp'
+        $a | Should -Contain '/XF'
+        ($a -join ' ') | Should -Match '/XF NTUSER\.DAT\* \*\.tmp'
+    }
+    It 'sem exclusoes NAO inclui /XD nem /XF' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Not -Contain '/XD'
+        $a | Should -Not -Contain '/XF'
+    }
     It 'rejeita Threads fora de 1..128 (ValidateRange)' {
         { Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Threads 0 } | Should -Throw
     }
@@ -166,6 +183,40 @@ Describe 'Measure-ArvoreRapido' {
         $m = Measure-ArvoreRapido -Path $script:mDir -LimiteArquivos 1
         $m.FileCount | Should -Be 1
         $m.Truncado | Should -BeTrue
+    }
+}
+
+Describe 'Get-ExclusoesPerfil' {
+    It 'devolve Dirs e Arquivos nao-vazios' {
+        $e = Get-ExclusoesPerfil
+        $e.Dirs.Count     | Should -BeGreaterThan 0
+        $e.Arquivos.Count | Should -BeGreaterThan 0
+    }
+    It 'inclui hives travados e caches conhecidos' {
+        $e = Get-ExclusoesPerfil
+        $e.Arquivos | Should -Contain 'NTUSER.DAT*'
+        $e.Dirs     | Should -Contain 'Temp'
+    }
+}
+
+Describe 'Test-OrigemEhPerfil' {
+    It 'pasta com NTUSER.DAT => perfil' {
+        $d = Join-Path ([IO.Path]::GetTempPath()) ("perfil_" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $d -Force | Out-Null
+        Set-Content -Path (Join-Path $d 'NTUSER.DAT') -Value 'x'
+        try { Test-OrigemEhPerfil -Path $d | Should -BeTrue }
+        finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    It 'C:\Users (raiz de perfis) => perfil' {
+        Test-OrigemEhPerfil -Path (Join-Path $env:SystemDrive 'Users') | Should -BeTrue
+    }
+    It 'pasta comum sem hive (fora de C:\Users) => NAO perfil' {
+        # NAO usar TEMP: em geral fica sob C:\Users\...\AppData\Local\Temp (seria perfil).
+        # Usa a arvore do repo (fora de C:\Users) p/ isolar so o ramo do hive.
+        $d = Join-Path $root ("comum_" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $d -Force | Out-Null
+        try { Test-OrigemEhPerfil -Path $d | Should -BeFalse }
+        finally { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 

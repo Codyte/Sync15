@@ -4,6 +4,11 @@
 #>
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
+# Microsoft.VisualBasic NAO e' carregado por padrao. Sem ele, [Microsoft.VisualBasic.FileIO.
+# FileSystem] em Remove-ToRecycleBin lanca, o catch devolve $false e o caller cai no fallback
+# Remove-Item -Force => EXCLUSAO PERMANENTE silenciosa em vez de mandar pra Lixeira. Carrega 1x.
+try { Add-Type -AssemblyName Microsoft.VisualBasic -ErrorAction Stop } catch { Write-Verbose "Microsoft.VisualBasic indisponivel: $($_.Exception.Message)" }
+
 function Remove-ToRecycleBin {
     param([Parameter(Mandatory)][string]$Path)
     try {
@@ -406,8 +411,12 @@ public static class XxHash64
                         Write-Host ("Enviando para Lixeira: {0}" -f $arquivo)
                         $ok = $false
                         if (Get-Command Remove-ToRecycleBin -ErrorAction SilentlyContinue) { $ok = Remove-ToRecycleBin -Path $arquivo }
-                        if (-not $ok) { Remove-Item -LiteralPath $arquivo -Force -ErrorAction Stop } # fallback
-                        if (Get-Command Registrar-Log -ErrorAction SilentlyContinue) { Registrar-Log ("Arquivo duplicado removido: {0}" -f $arquivo) }
+                        if (-not $ok) {
+                            # Lixeira falhou: o fallback apaga DE VEZ. Avisa em vez de escalar em silencio.
+                            Write-Warning ("Nao foi possivel mandar para a Lixeira; exclusao PERMANENTE: {0}" -f $arquivo)
+                            Remove-Item -LiteralPath $arquivo -Force -ErrorAction Stop
+                        }
+                        if (Get-Command Registrar-Log -ErrorAction SilentlyContinue) { Registrar-Log ("Arquivo duplicado removido{0}: {1}" -f $(if($ok){' (Lixeira)'}else{' (PERMANENTE)'}), $arquivo) }
                     }
                 } catch {
                     Write-Warning ("Falha ao processar '{0}': {1}" -f $arquivo, $_.Exception.Message)

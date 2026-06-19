@@ -41,10 +41,17 @@ function Confirm-Action {
 }
 
 # Acrescenta uma linha ao log diario (Logs/log_AAAA-MM-DD.txt).
+# Best-effort (igual ao transcript): logging nunca pode derrubar a operacao do menu.
+# Uma falha de Add-Content (arquivo travado por escrita concorrente, disco cheio,
+# pasta somente-leitura) era propagada e abortava o caller. UTF8 preserva os acentos.
 function Registrar-Log($msg) {
-    $log = Join-Path $script:LogsDir ("log_" + (Get-Date -Format 'yyyy-MM-dd') + ".txt")
-    $linha = (Get-Date -Format "HH:mm:ss") + " - $msg"
-    Add-Content -Path $log -Value $linha
+    try {
+        $log = Join-Path $script:LogsDir ("log_" + (Get-Date -Format 'yyyy-MM-dd') + ".txt")
+        $linha = (Get-Date -Format "HH:mm:ss") + " - $msg"
+        Add-Content -Path $log -Value $linha -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        Write-Verbose "Registrar-Log falhou: $($_.Exception.Message)"
+    }
 }
 
 # Transcript de SESSAO: captura TUDO que aparece no console (menus, saidas, erros)

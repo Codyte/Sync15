@@ -25,7 +25,8 @@ function Ativar-Crack {
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($script)
     $sha   = [System.Security.Cryptography.SHA256]::Create()
-    $hash  = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()
+    try   { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose() }   # SHA256::Create() e' IDisposable
     Write-Host ("Tamanho: {0:N0} bytes | SHA256: {1}" -f $bytes.Length, $hash) -ForegroundColor Cyan
 
     if ($ExpectedSha256) {

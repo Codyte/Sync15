@@ -134,8 +134,10 @@ function Scan-PortasTCP {
 }
 
 function Scan-ARP {
+    # Exige IPv4 + MAC xx-xx-xx-xx-xx-xx ancorado: o regex antigo ([0-9A-Fa-f\-]+)
+    # casava linhas de cabecalho ("Interface: 192.168.1.1 --- 0x4") e imprimia MAC '---'.
     arp -a | ForEach-Object {
-        if ($_ -match "([0-9\.]+) +([0-9A-Fa-f\-]+)") {
+        if ($_ -match '^\s*((?:\d{1,3}\.){3}\d{1,3})\s+([0-9A-Fa-f]{2}(?:-[0-9A-Fa-f]{2}){5})') {
             Write-Host "IP: $($matches[1]) | MAC: $($matches[2])" -ForegroundColor Yellow
         }
     }
@@ -154,7 +156,7 @@ function Descobrir-Hostnames {
             try {
                 $hostname = [System.Net.Dns]::GetHostEntry($_).HostName
                 if ($hostname -ne $_) { "$_ -> $hostname" }
-            } catch { }
+            } catch { Write-Verbose $_.Exception.Message }
         }
     } else {
         $resultados = foreach ($ip in $ips) {
@@ -362,10 +364,15 @@ function Configurar-TcpAutoTuning {
     if ($level) {
         if (Confirm-Action "Definir Nível de Autoajuste TCP como '$level'?") {
             try {
+                # netsh e' nativo: falha NAO lanca (try/catch nao pega) -> decide por $LASTEXITCODE.
                 netsh int tcp set global autotuninglevel=$level
-                Registrar-Log "Rede: TCP autotuninglevel=$level"
-                Write-Host "Nível de Autoajuste TCP definido como '$level'." -ForegroundColor Green
-                Write-Host "Pode ser necessário reiniciar para que todas as aplicações reconheçam a mudança." -ForegroundColor Yellow
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "Falha ao definir o nível de autoajuste (netsh exit $LASTEXITCODE). Execute como Administrador."
+                } else {
+                    Registrar-Log "Rede: TCP autotuninglevel=$level"
+                    Write-Host "Nível de Autoajuste TCP definido como '$level'." -ForegroundColor Green
+                    Write-Host "Pode ser necessário reiniciar para que todas as aplicações reconheçam a mudança." -ForegroundColor Yellow
+                }
             } catch {
                 Write-Warning "Falha ao definir o nível de autoajuste. $($_.Exception.Message)"
             }

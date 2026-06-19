@@ -47,12 +47,15 @@ function Monitorar-Recursos {
     $ciclo = 0
     $discosCache = Get-DiscosInfo
 
-    $largura = [Console]::WindowWidth
+    # WindowWidth lanca em host sem console (ISE/redirecionado); fallback 80, igual ao
+    # try/catch do CursorVisible logo abaixo. Sem isto, throw antes do try/finally.
+    $largura = try { [Console]::WindowWidth } catch { 80 }
+    if ($largura -lt 1) { $largura = 80 }
     $cursorVisivelOrig = $true
-    try { $cursorVisivelOrig = [Console]::CursorVisible } catch { }
+    try { $cursorVisivelOrig = [Console]::CursorVisible } catch { Write-Verbose $_.Exception.Message }
 
     Clear-Host
-    try { [Console]::CursorVisible = $false } catch { }
+    try { [Console]::CursorVisible = $false } catch { Write-Verbose $_.Exception.Message }
     Write-Host ("--- MONITORAMENTO EM TEMPO REAL (Ctrl+C para sair) ---").PadRight($largura)
 
     # Pré-aloca linhas fixas para reescrever no mesmo lugar
@@ -97,8 +100,8 @@ function Monitorar-Recursos {
             }
         }
     } finally {
-        try { [Console]::SetCursorPosition(0,4) } catch { }
-        try { [Console]::CursorVisible = $cursorVisivelOrig } catch { }
+        try { [Console]::SetCursorPosition(0,4) } catch { Write-Verbose $_.Exception.Message }
+        try { [Console]::CursorVisible = $cursorVisivelOrig } catch { Write-Verbose $_.Exception.Message }
     }
 }
 

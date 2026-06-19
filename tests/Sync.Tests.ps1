@@ -59,16 +59,24 @@ Describe 'Get-RobocopyArgs' {
         $a | Should -Contain '/MT:32'
         $a | Should -Not -Contain '/MT:16'
     }
-    It '-Rapido troca /V por /NDL /NFL' {
-        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Rapido
+    It 'default usa só-resumo (/NDL /NFL) e NAO /V' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
         $a | Should -Contain '/NDL'
         $a | Should -Contain '/NFL'
         $a | Should -Not -Contain '/V'
     }
-    It 'sem -Rapido mantem /V e nao inclui /NDL' {
-        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+    It '-Detalhado adiciona /V e remove só-resumo' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -Detalhado
         $a | Should -Contain '/V'
         $a | Should -Not -Contain '/NDL'
+    }
+    It 'inclui /BYTES sempre (resumo parseável)' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Contain '/BYTES'
+    }
+    It 'NAO usa /TEE (evita picotar saída do /MT no console/transcript)' {
+        $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log'
+        $a | Should -Not -Contain '/TEE'
     }
     It '-IoNaoBufferizado adiciona /J' {
         $a = Get-RobocopyArgs -Origem 'C:\o' -Destino 'C:\d' -Modo Unilateral -LogPath 'C:\x.log' -IoNaoBufferizado
@@ -183,6 +191,52 @@ Describe 'Measure-ArvoreRapido' {
         $m = Measure-ArvoreRapido -Path $script:mDir -LimiteArquivos 1
         $m.FileCount | Should -Be 1
         $m.Truncado | Should -BeTrue
+    }
+}
+
+Describe 'ConvertTo-TamanhoLegivel' {
+    It 'GB' { ConvertTo-TamanhoLegivel -Bytes 2147483648 | Should -Match 'GB$' }
+    It 'MB' { ConvertTo-TamanhoLegivel -Bytes 5242880   | Should -Match 'MB$' }
+    It 'KB' { ConvertTo-TamanhoLegivel -Bytes 2048      | Should -Match 'KB$' }
+    It 'B'  { ConvertTo-TamanhoLegivel -Bytes 512       | Should -Be '512 B' }
+}
+
+Describe 'Format-RobocopyResumo' {
+    BeforeAll {
+        # Saida tipica do robocopy COM /BYTES (contadores em bytes crus -> 6 inteiros por linha).
+        $script:logOk = @(
+            '   Origem : C:\o\',
+            '     Dest : C:\d\',
+            '  Iniciado: sexta-feira, 19 de junho de 2026 11:26:52',
+            '------------------------------------------------------------------------------',
+            '               Total   Copiado  Ignorado  Incompat.    FALHA    Extras',
+            'Diretórios:       729       729       594         0         0       176',
+            ' Arquivos:       3614       782      2832         0         0        50',
+            '    Bytes:  2366541824 386290123 1980251701         0         0 797123456',
+            '   Tempos:   0:02:53   0:00:12                       0:00:00   0:00:01'
+        )
+    }
+    It 'devolve tabela com rótulos PT e tempo' {
+        $s = Format-RobocopyResumo -Linhas $script:logOk
+        $s | Should -Match 'Diretórios:'
+        $s | Should -Match 'Arquivos:'
+        $s | Should -Match 'Bytes:'
+        $s | Should -Match 'Tempo total: 0:02:53'
+    }
+    It 'converte bytes crus para GB/MB legíveis (nao deixa o inteiro cru)' {
+        $s = Format-RobocopyResumo -Linhas $script:logOk
+        $s | Should -Match 'GB'
+        $s | Should -Not -Match '2366541824'
+    }
+    It 'NAO confunde o horário do cabeçalho com o tempo total' {
+        $s = Format-RobocopyResumo -Linhas $script:logOk
+        $s | Should -Not -Match '11:26:52'
+    }
+    It 'devolve $null quando nao ha bloco de resumo (ex.: sem /BYTES)' {
+        Format-RobocopyResumo -Linhas @('linha qualquer','sem contadores') | Should -BeNullOrEmpty
+    }
+    It 'nao lança com lista vazia' {
+        { Format-RobocopyResumo -Linhas @() } | Should -Not -Throw
     }
 }
 

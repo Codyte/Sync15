@@ -224,123 +224,18 @@ function Iniciar-Sincronizacao {
         }
         '5' {
             $cmp = Comparar-EspacoVsOrigemV2 -Origem $origem -Destino $destino
-            "`n--- RELATÓRIO ---"
-            "Origem........: {0:N2} GB" -f $cmp.OrigemGB
-            "Livre destino.: {0:N2} GB" -f $cmp.LivresDestinoGB
-            "Margem........: {0:N2} GB" -f $cmp.MargemGB
-            "Pode copiar?..: {0}" -f $( if ($cmp.PodeCopiar) { "SIM" } else { "NÃO" } )
+            Write-Host "`n--- RELATÓRIO ---" -ForegroundColor Cyan
+            Write-Host ("Origem........: {0:N2} GB" -f $cmp.OrigemGB)
+            Write-Host ("Livre destino.: {0:N2} GB" -f $cmp.LivresDestinoGB)
+            Write-Host ("Margem........: {0:N2} GB" -f $cmp.MargemGB)
+            Write-Host ("Pode copiar?..: {0}" -f $( if ($cmp.PodeCopiar) { "SIM" } else { "NÃO" } )) -ForegroundColor $( if ($cmp.PodeCopiar) { 'Green' } else { 'Red' } )
+            if ($cmp.PodeCopiar -and (Confirm-Action -Prompt "Executar cópia unilateral SEGURA agora?")) {
+                Start-RobocopyUnilateralSeguro -Origem $origem -Destino $destino
+            }
             Pause-Script
         }
         default { Write-Host "Cancelado."; Pause-Script }
     }
-}
-
-function Executar-Robocopy {
-     param([string]$Origem, [string]$Destino, [string]$ModoSincronizacao)
-    Write-Host "------------------------------------------------"
-    Write-Host "Origem:  $Origem" -ForegroundColor Green
-    Write-Host "Destino: $Destino" -ForegroundColor Green
-    Write-Host "Modo:    $ModoSincronizacao" -ForegroundColor Green
-    Write-Host "------------------------------------------------"
-    if ([string]::IsNullOrEmpty($Origem) -or [string]::IsNullOrEmpty($Destino)) { Write-Error "Pastas de origem ou destino não selecionadas. Encerrando."; Pause-Script; return }
-    if ((Convert-Path $Origem) -eq (Convert-Path $Destino)) { Write-Error "As pastas de origem e destino não podem ser iguais."; Pause-Script; return }
-    if (-not (VerificarEspacoEmDisco -caminho $Destino)) { Write-Host "Abortando devido a espaço em disco insuficiente ou cancelamento do usuário."; Pause-Script; return }
-    if (-not (Confirm-Action -Prompt "Confirma o início da sincronização?")) { Write-Host "Operação cancelada."; Pause-Script; return }
-    $logFile = Join-Path -Path (Get-SyncMasterDataDir -SubPasta 'Logs') -ChildPath "sincronizacao_$(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss').log"
-    # Transcript proprio da operacao. $txOk evita que o finally pare o transcript de
-    # SESSAO caso este (aninhado) nao chegue a iniciar (ex.: PS 5.x sem suporte concorrente).
-    $txOk = $false
-    try { Start-Transcript -Path $logFile -Append -ErrorAction Stop | Out-Null; $txOk = $true }
-    catch { Write-Verbose "Transcript da operacao nao iniciado: $($_.Exception.Message)" }
-    try {
-        if ($ModoSincronizacao -eq "Unilateral") {
-            Write-Host "Iniciando cópia unilateral (Origem -> Destino)..."
-            robocopy "$Origem" "$Destino" /E /COPYALL /R:3 /W:5 /XJ /MT /V
-        } elseif ($ModoSincronizacao -eq "Bilateral") {
-            Write-Host "Iniciando sincronização bilateral (espelhamento)..."
-            Write-Host "Etapa 1: Sincronizando Origem -> Destino..."
-            robocopy "$Origem" "$Destino" /MIR /COPYALL /R:3 /W:5 /XJ /MT /V
-            Write-Host "Etapa 2: Sincronizando Destino -> Origem..."
-            robocopy "$Destino" "$Origem" /MIR /COPYALL /R:3 /W:5 /XJ /MT /V
-        }
-        if ($LASTEXITCODE -ge 8) { Write-Error "Processo de cópia encontrou erros graves. Verifique o log." }
-        elseif ($LASTEXITCODE -ge 1 -and $LASTEXITCODE -lt 8) { Write-Host "Sincronização concluída com sucesso (arquivos foram copiados)." -ForegroundColor Green }
-        else { Write-Host "Sincronização concluída. Nenhum arquivo precisou ser copiado." -ForegroundColor Green }
-    }
-    catch { Write-Error "Ocorreu um erro inesperado durante a cópia: $($_.Exception.Message)" }
-    finally { Write-Host "Log de operação detalhado salvo em: $logFile"; if ($txOk) { try { Stop-Transcript | Out-Null } catch { Write-Verbose $_.Exception.Message } }; Pause-Script }
-}
-
-function VerificarEspacoEmDisco {
-    param([string]$caminho)
-
-    try {
-        # --- DESTINO EM REDE (UNC) ---
-        if ($caminho -like "\\*") {
-            # \\servidor\compartilhamento\pasta\...
-            $partes = $caminho.TrimEnd('\').Split([System.IO.Path]::DirectorySeparatorChar, [System.StringSplitOptions]::RemoveEmptyEntries)
-            if ($partes.Count -lt 2) { throw "Caminho UNC inválido: $caminho" }
-
-            $servidor = $partes[0]
-            $compartilhamento = $partes[1]
-
-            # Abre sessão CIM no servidor (requer RPC/WMI liberado e permissão)
-            $sess = New-CimSession -ComputerName $servidor -ErrorAction Stop
-            try {
-                # 1) Descobre o caminho físico do compartilhamento (ex: D:\Shares\Softwares)
-                $share = Get-CimInstance -CimSession $sess -ClassName Win32_Share -Filter ("Name='{0}'" -f $compartilhamento) -ErrorAction Stop
-                if (-not $share -or [string]::IsNullOrWhiteSpace($share.Path)) {
-                    throw "Compartilhamento '$compartilhamento' não encontrado em $servidor."
-                }
-
-                # 2) Extrai a letra da unidade (DeviceID em Win32_LogicalDisk é 'D:' e NÃO 'D:\')
-                $root = [System.IO.Path]::GetPathRoot($share.Path) # ex: 'D:\'
-                $driveId = $root.Substring(0,2)                     # 'D:'
-
-                # 3) Consulta espaço livre do disco onde mora o compartilhamento
-                $disk = Get-CimInstance -CimSession $sess -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $driveId) -ErrorAction Stop
-                $freeSpace = [int64]$disk.FreeSpace
-            }
-            finally {
-                if ($sess) { Remove-CimSession -CimSession $sess -ErrorAction SilentlyContinue }
-            }
-        }
-        else {
-            # --- DESTINO LOCAL ---
-            $driveLetter = [System.IO.Path]::GetPathRoot($caminho).TrimEnd('\')
-            $driveInfo = Get-PSDrive -Name $driveLetter.Trim(":") -ErrorAction Stop
-            $freeSpace = [int64]$driveInfo.Free
-        }
-
-        if ($freeSpace -lt 1GB) {
-            Write-Warning ("Espaço em disco insuficiente no destino ({0:N2} MB livres)." -f ($freeSpace / 1MB))
-            return $false
-        }
-
-        Write-Host ("Espaço em disco suficiente no destino ({0:N2} GB livres)." -f ($freeSpace / 1GB)) -ForegroundColor Green
-        return $true
-    }
-    catch {
-        Write-Warning "Não foi possível validar o espaço em disco para '$caminho'. Detalhe: $($_.Exception.Message)"
-        # Permite seguir mediante confirmação, caso o ambiente bloqueie WMI/Firewall
-        return Confirm-Action -Prompt "Prosseguir SEM checar espaço em disco?"
-    }
-}
-
-function ObterModoSincronizacao {
-    param()
-    Write-Host "Escolha o modo de sincronização:"
-    Write-Host "1 - Sincronização Unilateral (Origem -> Destino)"
-    Write-Host "2 - Sincronização Bilateral (Espelhamento Mútuo)"
-    do {
-        $modo = Read-Host -Prompt "Digite o número correspondente ao modo desejado (ou 'C' para cancelar)"
-        switch ($modo) {
-            "1" { return "Unilateral" }
-            "2" { return "Bilateral" }
-            "C" { return $null }
-            default { Write-Warning "Opção inválida. Escolha '1', '2' ou 'C' para cancelar." }
-        }
-    } while ($true)
 }
 
 function Resolve-ShareToDiskInfoV2 {
@@ -539,6 +434,35 @@ function Get-RobocopyStatus {
     [pscustomobject]@{ ExitCode = $ExitCode; Severidade = $sev; Mensagem = $msg }
 }
 
+function Test-ParOrigemDestino {
+    <#
+      .SYNOPSIS  Valida o par origem/destino antes de qualquer robocopy (guard central).
+      .DESCRIPTION  Origem deve existir e ser pasta; origem != destino (compara caminhos
+        NORMALIZADOS, ignorando case e barra final). Escreve o erro e devolve $false quando
+        invalido. Chamado pelas presenters V2 -> cobre tanto o menu interativo quanto o
+        modo automatizado (-Acao Sincronizar) num so lugar.
+      .OUTPUTS  [bool]
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory=$true)][string]$Origem,
+        [Parameter(Mandatory=$true)][string]$Destino
+    )
+    if (-not (Test-Path -LiteralPath $Origem -PathType Container)) {
+        Write-Error "Origem inexistente ou não é uma pasta: $Origem"
+        return $false
+    }
+    # Destino pode ainda nao existir (robocopy cria); so normaliza o que da pra resolver.
+    $oReal = (Convert-Path -LiteralPath $Origem).TrimEnd('\')
+    $dReal = if (Test-Path -LiteralPath $Destino) { (Convert-Path -LiteralPath $Destino).TrimEnd('\') } else { $Destino.TrimEnd('\') }
+    if ($oReal -ieq $dReal) {
+        Write-Error "Origem e destino não podem ser o mesmo caminho: $oReal"
+        return $false
+    }
+    return $true
+}
+
 function Start-RobocopyUnilateralSeguro {
     <#
       .SYNOPSIS  Cópia unilateral (Origem -> Destino) com flags seguras e /dry-run opcional.
@@ -559,6 +483,8 @@ function Start-RobocopyUnilateralSeguro {
     Write-Host "Destino: $Destino"
     Write-Host "Modo   : Unilateral $copiaDesc$(if($Simular){' - SIMULAÇÃO (/L)'}else{''})"
     Write-Host "------------------------------------------------" -ForegroundColor Cyan
+
+    if (-not (Test-ParOrigemDestino -Origem $Origem -Destino $Destino)) { return }
 
     if (-not $IgnorarEspaco) {
         $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
@@ -584,16 +510,6 @@ function Start-RobocopyUnilateralSeguro {
     else                           { Write-Host  ("{0} Log: {1}" -f $st.Mensagem, $log) -ForegroundColor Green }
 }
 
-function Simular-RobocopyUnilateral {
-    param([string]$Origem,[string]$Destino)
-    Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -Simular
-}
-
-function Executar-RobocopyUnilateral {
-    param([string]$Origem,[string]$Destino,[switch]$IgnorarEspaco)
-    Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -IgnorarEspaco:$IgnorarEspaco
-}
-
 function Start-RobocopyEspelho {
     <#
       .SYNOPSIS  Espelha Origem -> Destino com /MIR (DESTRUTIVO: apaga no destino o que nao existe na origem).
@@ -614,6 +530,8 @@ function Start-RobocopyEspelho {
     Write-Host "Modo   : ESPELHO /MIR$(if($Simular){' - SIMULAÇÃO (/L)'}else{''})" -ForegroundColor Red
     Write-Host "AVISO: tudo no destino que NAO existe na origem sera APAGADO." -ForegroundColor Red
     Write-Host "------------------------------------------------" -ForegroundColor Red
+
+    if (-not (Test-ParOrigemDestino -Origem $Origem -Destino $Destino)) { return }
 
     if (-not $IgnorarEspaco) {
         $ok = VerificarEspacoEmDiscoV2 -caminho $Destino -MinLivresGB $MinLivresGB
@@ -680,4 +598,4 @@ function Agendar-TarefaSincronizacao {
     Pause-Script
 }
 
-Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Executar-Robocopy, VerificarEspacoEmDisco, ObterModoSincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Simular-RobocopyUnilateral, Executar-RobocopyUnilateral, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao
+Export-ModuleMember -Function Salvar-Diretorios, Menu-GerenciamentoDiretorios, Selecionar-DiretorioDaLista, ObterCaminhoPasta, Iniciar-Sincronizacao, Resolve-ShareToDiskInfoV2, VerificarEspacoEmDiscoV2, Get-TamanhoPastaBytesV2, Comparar-EspacoVsOrigemV2, Get-RobocopyArgs, Get-RobocopyStatus, Test-ParOrigemDestino, Start-RobocopyUnilateralSeguro, Start-RobocopyEspelho, Iniciar-SincronizacaoV2, Agendar-TarefaSincronizacao

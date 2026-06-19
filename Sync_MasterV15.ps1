@@ -1304,7 +1304,16 @@ switch ($Acao.ToUpper()) {
             Registrar-Log "ERRO (Agendado): Parâmetros -Origem e -Destino são obrigatórios para a ação 'Sincronizar'."
             exit 1
         }
-        Executar-Robocopy -Origem $Origem -Destino $Destino -ModoSincronizacao $Modo
+        # Engine V2 unica (mesma do menu interativo): nao-interativa (sem Confirm/Read-Host,
+        # que travavam o antigo Executar-Robocopy numa tarefa agendada), com guard de
+        # origem/destino e checagem de espaco UNC-aware embutidos nas presenters.
+        if ($Modo -eq 'Bilateral') {
+            # Espelhamento mutuo = /MIR nos dois sentidos (preserva semantica do modo antigo).
+            Start-RobocopyEspelho -Origem $Origem  -Destino $Destino
+            Start-RobocopyEspelho -Origem $Destino -Destino $Origem
+        } else {
+            Start-RobocopyUnilateralSeguro -Origem $Origem -Destino $Destino -PreservarTudo
+        }
     }
 
     'MENU' {

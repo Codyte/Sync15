@@ -39,10 +39,9 @@
         'Menu-Startups','Storage-Maintenance','Disk-SMART','Power-CPU-Tune','SearchIndexer-Toggle','Tasks-Noise',
         # Sync
         'Salvar-Diretorios','Menu-GerenciamentoDiretorios','Selecionar-DiretorioDaLista','ObterCaminhoPasta',
-        'Iniciar-Sincronizacao','Executar-Robocopy','VerificarEspacoEmDisco','ObterModoSincronizacao',
-        'Resolve-ShareToDiskInfoV2','VerificarEspacoEmDiscoV2','Get-TamanhoPastaBytesV2','Comparar-EspacoVsOrigemV2',
-        'Get-RobocopyArgs','Get-RobocopyStatus','Start-RobocopyUnilateralSeguro','Start-RobocopyEspelho',
-        'Simular-RobocopyUnilateral','Executar-RobocopyUnilateral','Iniciar-SincronizacaoV2','Agendar-TarefaSincronizacao',
+        'Iniciar-Sincronizacao','Resolve-ShareToDiskInfoV2','VerificarEspacoEmDiscoV2','Get-TamanhoPastaBytesV2',
+        'Comparar-EspacoVsOrigemV2','Get-RobocopyArgs','Get-RobocopyStatus','Test-ParOrigemDestino',
+        'Start-RobocopyUnilateralSeguro','Start-RobocopyEspelho','Iniciar-SincronizacaoV2','Agendar-TarefaSincronizacao',
         # Backup
         'Get-ZipBackupPath','Invoke-ZipBackup','Invoke-ZipRestore','Criar-BackupZIP','Restaurar-BackupZIP','Clonar-Disco',
         # Arquivos

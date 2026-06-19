@@ -48,6 +48,29 @@ Describe 'Get-RobocopyArgs' {
     }
 }
 
+Describe 'Test-ParOrigemDestino' {
+    BeforeAll {
+        $script:oDir = Join-Path ([IO.Path]::GetTempPath()) ("syncpar_o_" + [guid]::NewGuid().ToString('N'))
+        $script:dDir = Join-Path ([IO.Path]::GetTempPath()) ("syncpar_d_" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $script:oDir, $script:dDir -Force | Out-Null
+    }
+    AfterAll {
+        Remove-Item -LiteralPath $script:oDir, $script:dDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    It 'aceita origem existente != destino' {
+        Test-ParOrigemDestino -Origem $script:oDir -Destino $script:dDir | Should -BeTrue
+    }
+    It 'rejeita origem inexistente' {
+        Test-ParOrigemDestino -Origem (Join-Path $script:oDir 'nao_existe') -Destino $script:dDir -ErrorAction SilentlyContinue | Should -BeFalse
+    }
+    It 'rejeita origem == destino (mesmo caminho)' {
+        Test-ParOrigemDestino -Origem $script:oDir -Destino $script:oDir -ErrorAction SilentlyContinue | Should -BeFalse
+    }
+    It 'rejeita origem == destino ignorando barra final/case' {
+        Test-ParOrigemDestino -Origem $script:oDir -Destino ($script:oDir.ToUpper() + '\') -ErrorAction SilentlyContinue | Should -BeFalse
+    }
+}
+
 Describe 'Get-RobocopyStatus' {
     It 'exit 0 => SemMudancas' {
         (Get-RobocopyStatus -ExitCode 0).Severidade | Should -Be 'SemMudancas'

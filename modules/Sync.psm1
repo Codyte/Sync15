@@ -1,6 +1,6 @@
 ﻿<#
     Sync.psm1 — engine de sincronizacao (robocopy) + diretorios salvos do Sync Master.
-    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
+    Extraido do monolito legado (Fase 5). Depende de Core.psm1.
     Estado dos diretorios salvos (diretorios.json) mora no data dir do usuario
     (Get-SyncMasterDataDir) para o script ser portatil; migra o legado da raiz uma vez.
 #>
@@ -162,7 +162,7 @@ function ObterCaminhoPasta {
 function Iniciar-Sincronizacao {
 <#
 .SYNOPSIS
-    Menu unificado de sincronizacao (v15): junta os modos antes separados em "1" e "1.1".
+    Menu unificado de sincronizacao: junta os modos antes separados em "1" e "1.1".
 .DESCRIPTION
     Seleciona origem/destino e oferece, num so lugar, todos os modos com a engine segura
     (checagem de espaco, log e dry-run): SIMULAR, copiar unilateral segura, copiar unilateral
@@ -802,7 +802,7 @@ function Start-RobocopyEspelho {
 }
 
 function Iniciar-SincronizacaoV2 {
-    # Retrocompat (v15): os menus "1" e "1.1" foram unificados em Iniciar-Sincronizacao.
+    # Retrocompat: os menus "1" e "1.1" foram unificados em Iniciar-Sincronizacao.
     Iniciar-Sincronizacao
 }
 
@@ -819,14 +819,14 @@ function Agendar-TarefaSincronizacao {
 
     # Caminho do SCRIPT DE ENTRADA (nao deste .psm1): o launcher exporta SYNCMASTER_ENTRY.
     # $MyInvocation.MyCommand.Definition aqui dentro do modulo apontava para Sync.psm1 (bug):
-    # a Tarefa Agendada chamava o modulo em vez do Sync_MasterV15.ps1.
+    # a Tarefa Agendada chamava o modulo em vez do Sync_Master.ps1.
     $entryScript = if ($env:SYNCMASTER_ENTRY -and (Test-Path $env:SYNCMASTER_ENTRY)) {
         $env:SYNCMASTER_ENTRY
     } else {
-        Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_MasterV15.ps1'
+        Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_Master.ps1'
     }
     if (-not (Test-Path $entryScript)) {
-        Write-Warning "Script de entrada nao localizado ($entryScript). Abra o Sync Master pelo Sync_MasterV15.ps1 e tente de novo."
+        Write-Warning "Script de entrada nao localizado ($entryScript). Abra o Sync Master pelo Sync_Master.ps1 e tente de novo."
         Pause-Script; return
     }
 

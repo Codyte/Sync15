@@ -12,9 +12,6 @@ Describe 'SyncMaster.psd1 (manifesto)' {
     It 'e um manifesto valido' {
         { Test-ModuleManifest -Path $script:Manifesto -ErrorAction Stop } | Should -Not -Throw
     }
-    It 'declara versao 15.x' {
-        (Test-ModuleManifest -Path $script:Manifesto).Version.Major | Should -Be 15
-    }
     It 'expoe funcao do Core: <_>' -ForEach @(
         'Registrar-Log','Test-IsAdmin','Get-SyncMasterDataDir','Pause-Script','Start-SyncMasterLog'
     ) {

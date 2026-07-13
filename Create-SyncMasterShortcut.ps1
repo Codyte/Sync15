@@ -1,6 +1,6 @@
 ﻿param(
     [string]$ShortcutName = "Sync Master",
-    [string]$ScriptPath = ".\Sync_MasterV15.ps1",
+    [string]$ScriptPath = ".\Sync_Master.ps1",
     [string]$ShortcutDirectory = "$env:USERPROFILE\Desktop",
     [switch]$RunAsAdmin
 )

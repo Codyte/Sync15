@@ -1,3 +1,35 @@
+# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L62    END NAV INDEX =======================
+#   L72    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
+#   L89    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
+#   L93    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
+#   L157   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
+#   L262   Menu-Otimizacao
+#   L296   Criar-PontoRestauracao
+#   L383   Restaurar-PontoRestauracao
+#   L520   Menu-LimpezaDisco
+#   L548   Configurar-ServicoDefrag
+#   L652   Utilitários robustos ===============================================
+#   L673   Menu-ReparoSistema
+#   L702   Get-PowerPlans
+#   L723   Criar-PlanoDeEnergia
+#   L739   Menu-CriarPlanoEnergia
+#   L760   Mostrar-EstadoOtimizacao
+#   L774   Menu-OtimizacaoAvancada
+#   L861   Menu-Desempenho
+#   L926   Menu-GerenciarAgentes
+#   L964   Gerenciar-ServicoDeAgente
+#   L1014  Menu-Ferramentas
+#   L1040  Menu-Avancado
+#   L1082  Gerenciar-EstadosOciososProcessador
+#   L1125  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
+#   L1160  Criar-App
+#   L1223  Executor
+#   L1297  Aliases de verbo aprovado (retrocompat) ---
+#   L1307  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+# ======================= END NAV INDEX =======================
+
 ﻿# ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
 #   L40    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
@@ -31,9 +63,9 @@
 
 # ===================================================================
 # DESCRIÇÃO: Script para sincronização, backup e outras
-#            ferramentas de engenharia. (VERSÃO CONSOLIDADA)
+#            ferramentas de engenharia.
 # AUTOR:     Eng. Carlos Ortiz
-# VERSÃO:    15.0
+# VERSÃO:    controlada pelo git (git log / git tag)
 # ===================================================================
 #Requires -Version 5.1
 
@@ -128,7 +160,7 @@ if ($child -and -not $child.HasExited) {
 # depois os outros em ordem alfabetica.
 # Caminho deste script de entrada, exposto aos modulos (ex.: Agendar-TarefaSincronizacao
 # monta a Tarefa Agendada apontando para CA, nao para o .psm1). $PSCommandPath e' o
-# proprio Sync_MasterV15.ps1 mesmo quando chamado de qualquer diretorio.
+# proprio Sync_Master.ps1 mesmo quando chamado de qualquer diretorio.
 $env:SYNCMASTER_ENTRY = $PSCommandPath
 
 $modulesDir = Join-Path $PSScriptRoot 'modules'
@@ -278,7 +310,7 @@ function Criar-PontoRestauracao {
     Criar-PontoRestauracao -Descricao "Antes de otimizar"
 #>
      param(
-        [string]$Descricao = "Sync_Master_v15",
+        [string]$Descricao = "Sync_Master",
         [string]$Tipo = 'MODIFY_SETTINGS'   # aceita sinônimos, case-insensitive
     )
 
@@ -1030,7 +1062,7 @@ function Menu-Avancado {
                 Write-Warning "Alterar BCDEDIT pode impedir o boot do sistema. NÃO prossiga sem um backup completo."
                 if(Confirm-Action -Prompt "Entendo os riscos e desejo prosseguir?"){
                     if (Confirm-Action -Prompt "Criar um Ponto de Restauração antes? (fortemente recomendado)") {
-                        Criar-PontoRestauracao -Descricao "Antes de bcdedit (Sync Master v15)"
+                        Criar-PontoRestauracao -Descricao "Antes de bcdedit (Sync Master)"
                     }
                     $bcd_cmd = Read-Host "Digite o comando bcdedit COMPLETO a ser executado (ex: /set useplatformclock true)"
                     if ([string]::IsNullOrWhiteSpace($bcd_cmd)) { Write-Warning "Nenhum comando inserido." }
@@ -1067,7 +1099,7 @@ function Gerenciar-EstadosOciososProcessador {
         '2' {
             if (Confirm-Action -Prompt "AVISO: Desabilitar estados ociosos (IDLEDISABLE = 1)?") {
                  if (Confirm-Action -Prompt "Criar um Ponto de Restauração antes? (recomendado)") {
-                    Criar-PontoRestauracao -Descricao "Antes de desabilitar idle states (Sync Master v15)"
+                    Criar-PontoRestauracao -Descricao "Antes de desabilitar idle states (Sync Master)"
                  }
                  if (Confirm-Action -Prompt "CONFIRMAÇÃO FINAL: Continuar?") {
                     Powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_PROCESSOR IDLEDISABLE 1
@@ -1097,7 +1129,7 @@ try {
 
 
 # Confirm-Action e fornecida por modules/Core.psm1 (importado no topo). O fallback
-# local antigo foi removido na v15 por ser codigo morto.
+# local antigo foi removido por ser codigo morto.
 
 
 
@@ -1206,7 +1238,7 @@ function Executor {
     # WinUtil (Chris Titus Tech) e carregado remoto via irm. Antes era um embed
     # de ~16k linhas (v25.06.27); ver historico git para aquela versao pinada.
     #
-    # ENDURECIMENTO v15 (supply-chain): em vez de baixar-e-executar as cegas, o
+    # ENDURECIMENTO (supply-chain): em vez de baixar-e-executar as cegas, o
     # script agora (1) baixa o conteudo para uma string, (2) calcula o SHA256 e
     # mostra antes de rodar, (3) se um hash esperado for fornecido (parametro
     # -ExpectedSha256 ou env WINUTIL_EXPECTED_SHA256), ABORTA quando nao bate.
@@ -1262,7 +1294,7 @@ function Executor {
 }
 
 
-# --- Aliases de verbo aprovado (retrocompat v15) ---
+# --- Aliases de verbo aprovado (retrocompat) ---
 # As funcoes seguem com nome PT (o lint do projeto ignora PSUseApprovedVerbs de proposito);
 # estes aliases so melhoram a descoberta no console (Get-Command New-*, Show-*, Restore-*).
 Set-Alias -Name Restore-PontoRestauracao -Value Restaurar-PontoRestauracao -Force
@@ -1275,7 +1307,7 @@ Set-Alias -Name New-App                   -Value Criar-App                    -F
 # --- PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # O script realmente começa a "fazer" algo a partir daqui.
 
-# 3.1: Privilégios — checado por AÇÃO (v15). O modo automatizado '-Acao Sincronizar'
+# 3.1: Privilégios — checado por AÇÃO. O modo automatizado '-Acao Sincronizar'
 # (robocopy) NÃO exige admin; antes um exit global aqui quebrava a Tarefa Agendada
 # rodando como usuário comum. O gate de admin agora fica dentro do menu interativo.
 

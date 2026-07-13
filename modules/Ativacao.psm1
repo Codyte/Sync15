@@ -1,11 +1,11 @@
 ﻿<#
     Ativacao.psm1 — ativacao do Windows.
-    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
+    Extraido do monolito legado (Fase 5). Depende de Core.psm1.
 #>
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
 function Ativar-Crack {
-    # Endurecimento v15 (supply-chain): baixa->SHA256->confirma, com pin opcional, e
+    # Endurecimento (supply-chain): baixa->SHA256->confirma, com pin opcional, e
     # executa via scriptblock (em vez de Invoke-Expression). Mesmo padrao do Executor/WinUtil.
     param(
         [string]$Url = 'https://get.activated.win',

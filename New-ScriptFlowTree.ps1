@@ -1,3 +1,41 @@
+# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L74    END NAV INDEX =======================
+#   L112   Ensure-FlowShortcut
+#   L134   Get-ChildrenByParent
+#   L135   Show-MenuLoop
+#   L158   ConvertTo-SafeLiteral
+#   L159   Normalize-MenuTitle
+#   L171   Get-ExpressionStringValue
+#   L184   Get-CommandStringLiteralValue
+#   L207   ConvertTo-Slug
+#   L222   Format-OrderPrefix
+#   L224   New-DirectorySafe
+#   L225   Write-FileSafe
+#   L243   Backup-OutputIfExists
+#   L254   Get-AstParentFunctionName
+#   L255   Test-MenuKey
+#   L256   Get-SwitchClauseKeys
+#   L271   Test-IsMenuSwitch
+#   L280   Get-CommandCallsFromAst
+#   L294   Get-FirstScriptFunctionCall
+#   L295   Get-FunctionCallsFromAst
+#   L296   Get-CaseCommands
+#   L307   Get-MenuTargetFromClause
+#   L315   New-ActionWrapperName
+#   L322   Get-MenuTitlesForSwitch
+#   L391   Write-NodeMetadata
+#   L410   Write-Manifest
+#   L423   Add-ReportItem
+#   L425   Initialize-SourceIndex
+#   L439   Write-Main
+#   L466   Export-FunctionCallChildren
+#   L481   Export-FunctionSubtree
+#   L487   Export-MenuSwitchChildren
+#   L541   Export-RootMenu
+#   L550   Write-Reports
+# ======================= END NAV INDEX =======================
+
 ﻿# ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
 #   L74    Ensure-FlowShortcut

@@ -1,7 +1,7 @@
 ﻿<#
     Install-SyncMaster.ps1 — instala o Sync Master como MODULO do PowerShell.
 
-    Copia o manifesto (SyncMaster.psd1), o launcher (Sync_MasterV15.ps1) e a pasta
+    Copia o manifesto (SyncMaster.psd1), o launcher (Sync_Master.ps1) e a pasta
     modules\ para o diretorio de modulos do usuario (ou da maquina). Depois disso:
       - as 90+ funcoes ficam disponiveis por autoload (Get-Command -Module SyncMaster);
       - 'Start-SyncMaster' abre o menu de qualquer pasta, em qualquer sessao.
@@ -57,7 +57,7 @@ if ($Uninstall) {
 
 # 3) Instalar: copia manifesto + launcher + modules\ (sem tests/tools/.git).
 $origem = $PSScriptRoot
-$itens  = @('SyncMaster.psd1','Sync_MasterV15.ps1','modules')
+$itens  = @('SyncMaster.psd1','Sync_Master.ps1','modules')
 foreach ($i in $itens) {
     if (-not (Test-Path (Join-Path $origem $i))) { throw "Item de origem ausente: $i (rode a partir da raiz do repo)" }
 }
@@ -70,7 +70,7 @@ if ($PSCmdlet.ShouldProcess($destino, 'Instalar modulo SyncMaster')) {
     if (Test-Path $destino) { Remove-Item $destino -Recurse -Force }
     New-Item -ItemType Directory -Path $destino -Force | Out-Null
     Copy-Item (Join-Path $origem 'SyncMaster.psd1')    $destino
-    Copy-Item (Join-Path $origem 'Sync_MasterV15.ps1') $destino
+    Copy-Item (Join-Path $origem 'Sync_Master.ps1')    $destino
     Copy-Item (Join-Path $origem 'modules')            $destino -Recurse
 
     # 4) Valida o manifesto instalado.

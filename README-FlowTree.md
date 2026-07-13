@@ -1,19 +1,19 @@
-# Flow Tree Generator - Sync Master v12.2
+# Flow Tree Generator - Sync Master
 
 ## Objective
-`New-ScriptFlowTree.ps1` performs **static analysis** of `Sync_MasterV14.ps1` and generates a navigable directory tree (`SyncMaster-Flow/`) representing menu flow, options, and function calls.
+`New-ScriptFlowTree.ps1` performs **static analysis** of `Sync_Master.ps1` and generates a navigable directory tree (`SyncMaster-Flow/`) representing menu flow, options, and function calls.
 
 It does **not** execute the original Sync Master logic. It parses source code (AST) and emits structure + reports.
 
 ## Safety Notice
-- Do not use the generator to execute `Sync_MasterV14.ps1`.
+- Do not use the generator to execute `Sync_Master.ps1`.
 - The source script must be treated as **analysis input only**.
 - The generator must never invoke admin/dangerous operations from the source script.
 
 ## Run Generator
 ```powershell
 pwsh -ExecutionPolicy Bypass -File .\New-ScriptFlowTree.ps1 \
-  -SourcePath .\Sync_MasterV14.ps1 \
+  -SourcePath .\Sync_Master.ps1 \
   -OutputRoot .\SyncMaster-Flow \
   -Force \
   -GenerateReports \
@@ -50,5 +50,5 @@ These are expected and not part of current consolidation scope:
 - dangerous command presence only flagged, never executed
 
 ## Scope Policy
-- Do not modify `Sync_MasterV14.ps1` during flow-tree consolidation.
+- Do not modify `Sync_Master.ps1` during flow-tree consolidation.
 - Do not attempt full closure of all `manual-review.md` findings in this phase.

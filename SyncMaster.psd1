@@ -1,11 +1,13 @@
 ﻿# SyncMaster.psd1 — manifesto do modulo (Fase A do refator).
 # Empacota todos os modulos de dominio num unico ponto de entrada versionado:
 #   Import-Module .\SyncMaster.psd1   ->   carrega Core + dominios, exporta as funcoes abaixo.
-# Core vem primeiro em NestedModules (dependencia dos demais). O launcher Sync_MasterV15.ps1
+# Core vem primeiro em NestedModules (dependencia dos demais). O launcher Sync_Master.ps1
 # pode importar este manifesto em vez de varrer modules\*.psm1 manualmente.
+# Versao do produto e' controlada pelo git (tags); ModuleVersion existe so porque o
+# formato .psd1 exige o campo.
 @{
     RootModule        = ''
-    ModuleVersion     = '15.0.0'
+    ModuleVersion     = '1.0.0'
     GUID              = 'b7bf2716-92f9-49ea-b346-31befc2c5630'
     Author            = 'Eng. Carlos Ortiz'
     CompanyName       = 'Codyte'

@@ -1,6 +1,6 @@
 ﻿<#
     Backup.psm1 — backup ZIP e clonagem de disco.
-    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Depende de Core.psm1.
+    Extraido do monolito legado (Fase 5). Depende de Core.psm1.
 #>
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)
 
@@ -21,7 +21,9 @@ function Get-ZipBackupPath {
         [datetime]$Timestamp = (Get-Date)
     )
     $nome = "Backup_{0}_{1}.zip" -f (Split-Path $OrigemPath -Leaf), $Timestamp.ToString('yyyyMMdd_HHmmss')
-    return (Join-Path -Path $DestinoDir -ChildPath $nome)
+    # [IO.Path]::Combine, nao Join-Path: Join-Path valida o drive contra os PSDrives da
+    # sessao e lanca DriveNotFoundException p/ unidade inexistente — quebra a pureza.
+    return [IO.Path]::Combine($DestinoDir, $nome)
 }
 
 function Invoke-ZipBackup {

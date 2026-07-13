@@ -1,6 +1,6 @@
 ﻿@{
-    # PSScriptAnalyzer settings para Sync_MasterV14.ps1
-    # Uso: Invoke-ScriptAnalyzer -Path .\Sync_MasterV14.ps1 -Settings .\PSScriptAnalyzerSettings.psd1
+    # PSScriptAnalyzer settings do Sync Master
+    # Uso: Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1
     Severity = @('Error', 'Warning')
 
     ExcludeRules = @(

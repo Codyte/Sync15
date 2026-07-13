@@ -1,4 +1,4 @@
-﻿# Pester 5 — testes das funcoes PURAS do Sync Master v15.
+﻿# Pester 5 — testes das funcoes PURAS do Sync Master.
 # Rodar:  Invoke-Pester -Path .\tests
 # Alvos: Parse-Selection (Otimizacao.psm1) e Ensure-Dir (Core.psm1).
 

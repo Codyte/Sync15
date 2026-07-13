@@ -1,6 +1,6 @@
 ﻿<#
-    Otimizacao.psm1 — funcoes de otimizacao/desempenho avancado extraidas de
-    Sync_MasterV15.ps1 (Fase 2 do refator). Antes viviam ANINHADAS dentro de
+    Otimizacao.psm1 — funcoes de otimizacao/desempenho avancado extraidas do
+    launcher Sync_Master.ps1 (Fase 2 do refator). Antes viviam ANINHADAS dentro de
     Menu-OtimizacaoAvancada (escopo fragil: so existiam quando aquele menu rodava).
     Depende de Core.psm1 (Pause-Script, Confirm-Action, Require-Admin, Ensure-Dir).
 #>
@@ -18,7 +18,7 @@ function Pause-Local { Pause-Script }
         catch { $false }
     }
     function Set-DWord($Path,$Name,$Value){
-        # Auto-backup do Registro UMA vez por sessão antes da 1ª escrita destrutiva (v15).
+        # Auto-backup do Registro UMA vez por sessão antes da 1ª escrita destrutiva.
         if (-not $script:RegBackupDone) {
             try { Backup-Registro; $script:RegBackupDone = $true }
             catch { Write-Warning "Backup automático do Registro falhou: $($_.Exception.Message)" }

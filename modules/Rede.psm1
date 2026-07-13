@@ -1,6 +1,6 @@
 ﻿<#
     Rede.psm1 — diagnostico e otimizacao de rede do Sync Master.
-    Extraido do monolito Sync_MasterV14.ps1 (Fase 5). Auto-contido; depende
+    Extraido do monolito legado (Fase 5). Auto-contido; depende
     apenas de Core.psm1 (Pause-Script, Confirm-Action, Registrar-Log).
 #>
 Import-Module (Join-Path $PSScriptRoot 'Core.psm1') -DisableNameChecking  # SEM -Force: -Force aninhado remove o Core global do launcher (colapsa Registrar-Log/Test-IsAdmin)

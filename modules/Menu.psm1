@@ -5,7 +5,7 @@
     Agora: Get-MenuPrincipal devolve uma TABELA de entradas (dado puro, testavel) e
     Show-MenuPrincipal so RENDERIZA. O DISPATCH continua no launcher (& $entry.Comando),
     porque algumas acoes (Menu-Otimizacao, Executor, Criar-App) sao definidas no proprio
-    Sync_MasterV15.ps1 e nao sao visiveis de dentro de um modulo.
+    Sync_Master.ps1 e nao sao visiveis de dentro de um modulo.
 
     Sentinelas de Comando: '__SAIR__' encerra o loop. Demais valores = nome de funcao a invocar.
     Acrescentar um item do menu = uma linha na tabela; nenhum 'switch' a editar.
@@ -50,7 +50,7 @@ function Show-MenuPrincipal {
 
     try { Clear-Host } catch { Write-Verbose $_.Exception.Message }  # host sem console (ex.: Pester)
     Write-Host "======================================================" -ForegroundColor DarkGray
-    Write-Host "  SUPER FERRAMENTA DE ENGENHARIA - v15.0 (Consolidado)" -ForegroundColor Green
+    Write-Host "  SUPER FERRAMENTA DE ENGENHARIA - Sync Master" -ForegroundColor Green
     Write-Host "======================================================" -ForegroundColor DarkGray
     foreach ($e in $Entradas) {
         $cor = if ($e.Cor) { $e.Cor } else { 'Gray' }

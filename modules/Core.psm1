@@ -1,6 +1,6 @@
 ﻿<#
     Core.psm1 — utilitarios base do Sync Master, sem dependencias de dominio.
-    Primeiro modulo extraido do monolito Sync_MasterV14.ps1 (Fase 5 do refator).
+    Primeiro modulo extraido do monolito legado (Fase 5 do refator).
 
     Estado GRAVAVEL (logs, backups, config) mora num data dir do usuario, NAO ao lado
     do script — assim o Sync Master roda de qualquer local e em qualquer PC Windows,
@@ -97,13 +97,13 @@ function Visualizar-Logs {
 }
 
 # Abre o menu interativo do Sync Master a partir do modulo instalado. Acha o launcher
-# Sync_MasterV15.ps1 um nivel acima de modules\ (vale no repo e quando instalado como
-# modulo: Modules\SyncMaster\Sync_MasterV15.ps1 + Modules\SyncMaster\modules\Core.psm1).
+# Sync_Master.ps1 um nivel acima de modules\ (vale no repo e quando instalado como
+# modulo: Modules\SyncMaster\Sync_Master.ps1 + Modules\SyncMaster\modules\Core.psm1).
 # Permite digitar 'Start-SyncMaster' de qualquer lugar apos a instalacao.
 function Start-SyncMaster {
     # Sem [CmdletBinding()]: deixa $args capturar parametros extras p/ repassar ao launcher
     # (ex.: Start-SyncMaster -Acao Sincronizar -Origem X -Destino Y).
-    $entry = Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_MasterV15.ps1'
+    $entry = Join-Path (Split-Path $PSScriptRoot -Parent) 'Sync_Master.ps1'
     if (-not (Test-Path $entry)) {
         Write-Error "Launcher nao encontrado: $entry"
         return

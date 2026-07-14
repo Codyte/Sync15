@@ -1,6 +1,7 @@
 # Caches (disposable, local)
 .navindex-cache.json
 .navi-cache.json
+.handoff/
 
 # Runtime logs
 Logs/

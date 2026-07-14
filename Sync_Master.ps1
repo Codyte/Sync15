@@ -1,64 +1,32 @@
 # ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L60    END NAV INDEX =======================
-#   L71    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
-#   L88    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
-#   L92    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
-#   L156   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
-#   L261   Menu-Otimizacao
-#   L295   Criar-PontoRestauracao
-#   L382   Restaurar-PontoRestauracao
-#   L519   Menu-LimpezaDisco
-#   L547   Configurar-ServicoDefrag
-#   L651   Utilitários robustos ===============================================
-#   L672   Menu-ReparoSistema
-#   L701   Get-PowerPlans
-#   L722   Criar-PlanoDeEnergia
-#   L738   Menu-CriarPlanoEnergia
-#   L759   Mostrar-EstadoOtimizacao
-#   L773   Menu-OtimizacaoAvancada
-#   L860   Menu-Desempenho
-#   L925   Menu-GerenciarAgentes
-#   L963   Gerenciar-ServicoDeAgente
-#   L1013  Menu-Ferramentas
-#   L1039  Menu-Avancado
-#   L1081  Gerenciar-EstadosOciososProcessador
-#   L1124  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
-#   L1159  Criar-App
-#   L1222  Executor
-#   L1296  Aliases de verbo aprovado (retrocompat) ---
-#   L1306  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+#   L39    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
+#   L56    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
+#   L60    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
+#   L132   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
+#   L237   Menu-Otimizacao
+#   L271   Criar-PontoRestauracao
+#   L356   Restaurar-PontoRestauracao
+#   L491   Menu-LimpezaDisco
+#   L519   Configurar-ServicoDefrag
+#   L623   Utilitários robustos ===============================================
+#   L644   Menu-ReparoSistema
+#   L673   Get-PowerPlans
+#   L694   Criar-PlanoDeEnergia
+#   L710   Menu-CriarPlanoEnergia
+#   L731   Menu-OtimizacaoAvancada
+#   L818   Menu-Desempenho
+#   L883   Menu-GerenciarAgentes
+#   L921   Gerenciar-ServicoDeAgente
+#   L971   Menu-Ferramentas
+#   L997   Menu-Avancado
+#   L1039  Gerenciar-EstadosOciososProcessador
+#   L1082  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
+#   L1117  Criar-App
+#   L1180  Executor
+#   L1254  Aliases de verbo aprovado (retrocompat) ---
+#   L1263  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # ======================= END NAV INDEX =======================
-
-#   L72    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
-#   L89    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
-#   L93    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
-#   L157   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
-#   L262   Menu-Otimizacao
-#   L296   Criar-PontoRestauracao
-#   L383   Restaurar-PontoRestauracao
-#   L520   Menu-LimpezaDisco
-#   L548   Configurar-ServicoDefrag
-#   L652   Utilitários robustos ===============================================
-#   L673   Menu-ReparoSistema
-#   L702   Get-PowerPlans
-#   L723   Criar-PlanoDeEnergia
-#   L739   Menu-CriarPlanoEnergia
-#   L760   Mostrar-EstadoOtimizacao
-#   L774   Menu-OtimizacaoAvancada
-#   L861   Menu-Desempenho
-#   L926   Menu-GerenciarAgentes
-#   L964   Gerenciar-ServicoDeAgente
-#   L1014  Menu-Ferramentas
-#   L1040  Menu-Avancado
-#   L1082  Gerenciar-EstadosOciososProcessador
-#   L1125  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
-#   L1160  Criar-App
-#   L1223  Executor
-#   L1297  Aliases de verbo aprovado (retrocompat) ---
-#   L1307  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
-# ======================= END NAV INDEX =======================
-
 
 # ===================================================================
 # DESCRIÇÃO: Script para sincronização, backup e outras
@@ -99,9 +67,20 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -and -not $IsRelaunched) {
         # Em alguns hosts, o caminho vem em Source; em outros, em Path
         $pwsh = if ($cmdPwsh.Source) { $cmdPwsh.Source } else { $cmdPwsh.Path }
     }
+    if (-not $pwsh) {
+        # PATH do processo pode estar velho (pwsh instalado nesta mesma sessão) — checa os
+        # locais padrão: MSI (ProgramFiles) e zip portátil (LOCALAPPDATA). Inline e não
+        # Find-PwshPath (PowerShellUpdate.psm1) porque este bloco roda ANTES dos módulos.
+        foreach ($cand in @(
+            [IO.Path]::Combine("$env:ProgramFiles", 'PowerShell', '7', 'pwsh.exe'),
+            [IO.Path]::Combine("$env:LOCALAPPDATA", 'Microsoft', 'powershell', 'pwsh.exe')
+        )) {
+            if ($cand -and (Test-Path -LiteralPath $cand)) { $pwsh = $cand; break }
+        }
+    }
 
     if (-not $pwsh) {
-        Write-Warning "PowerShell 7 (pwsh.exe) não encontrado no PATH. Continuando no PS 5.x."
+        Write-Warning "PowerShell 7 (pwsh.exe) não encontrado. Continuando no PS 5.x."
     }
     else {
         # Mantém elevação se a sessão atual estiver como Admin
@@ -121,9 +100,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7 -and -not $IsRelaunched) {
         if ($PSBoundParameters.ContainsKey('Origem'))  { $argList += @('-Origem',  $Origem) }
         if ($PSBoundParameters.ContainsKey('Destino')) { $argList += @('-Destino', $Destino) }
         if ($PSBoundParameters.ContainsKey('Modo'))    { $argList += @('-Modo',    $Modo) }
-
-        # Repassa posicionais (se houver)
-        if ($args.Count) { $argList += $args }
 
         $startSplat = @{
             FilePath         = $pwsh
@@ -316,9 +292,7 @@ function Criar-PontoRestauracao {
     Write-Host "Iniciando a criação do Ponto de Restauração..." -ForegroundColor Yellow
 
     # Admin?
-    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
-               ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin) { throw "Abra o PowerShell como Administrador." }
+    if (-not (Test-IsAdmin)) { throw "Abra o PowerShell como Administrador." }
 
     $ns  = 'root/default'
     $cls = 'SystemRestore'
@@ -413,9 +387,7 @@ function Restaurar-PontoRestauracao {
     )
 
     # 1) Admin checado
-    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
-               ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin) {
+    if (-not (Test-IsAdmin)) {
         throw "Abra o PowerShell como Administrador para restaurar um ponto."
     }
 
@@ -754,20 +726,6 @@ function Menu-CriarPlanoEnergia {
             default { Write-Warning "Opção inválida."; Pause-Script }
         }
     } while ($true)
-}
-
-function Mostrar-EstadoOtimizacao {
-    Write-Host "`n--- Estado Atual das Otimizações ---" -ForegroundColor Cyan
-    $dp = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-    $msd = Get-ItemProperty "HKCU:\Control Panel\Desktop"
-    $pwr = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Power"
-    try { $tele = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" } catch { $tele = $null }
-    Write-Host "DisablePagingExecutive: $($dp.DisablePagingExecutive)"
-    Write-Host "LargeSystemCache: $($dp.LargeSystemCache)"
-    Write-Host "HibernateEnabled: $($pwr.HibernateEnabled)"
-    Write-Host "MenuShowDelay: $($msd.MenuShowDelay)"
-    Write-Host "AllowTelemetry: $($tele.AllowTelemetry)"
-    Pause-Script
 }
 
 function Menu-OtimizacaoAvancada {
@@ -1299,7 +1257,6 @@ function Executor {
 Set-Alias -Name Restore-PontoRestauracao -Value Restaurar-PontoRestauracao -Force
 Set-Alias -Name New-PontoRestauracao     -Value Criar-PontoRestauracao      -Force
 Set-Alias -Name New-PlanoDeEnergia        -Value Criar-PlanoDeEnergia         -Force
-Set-Alias -Name Show-EstadoOtimizacao     -Value Mostrar-EstadoOtimizacao     -Force
 Set-Alias -Name New-App                   -Value Criar-App                    -Force
 
 
@@ -1312,13 +1269,49 @@ Set-Alias -Name New-App                   -Value Criar-App                    -F
 
 # 3.2: PowerShell 7 indisponível (o relançamento, quando o pwsh.exe EXISTE, já
 # acontece em PARTE 1.1 no topo do script). Se ainda estamos em PS 5.x aqui, é
-# porque o pwsh.exe NÃO foi encontrado: oferecer o menu de atualização.
+# porque o pwsh.exe NÃO foi encontrado: oferecer instalação automática (1 prompt S/N)
+# com cadeia de fallbacks (winget → MSI GitHub → aka.ms → zip portátil sem admin).
 if ($PSVersionTable.PSVersion.Major -lt 7 -and -not $IsRelaunched) {
-    Write-Host "Você está usando o Windows PowerShell $($PSVersionTable.PSVersion). Recomenda-se a versão 7 ou superior." -ForegroundColor Yellow
-    Menu-AtualizacaoPowerShell
-    Write-Host "Por favor, reinicie o script após a atualização." -ForegroundColor Yellow
-    Pause-Script
-    exit
+    if ($Acao -ne 'Menu') {
+        # Modo automatizado (Tarefa Agendada): NUNCA bloquear em prompt — robocopy roda no PS5.
+        Write-Warning "PowerShell 7 não encontrado; seguindo no Windows PowerShell $($PSVersionTable.PSVersion) (modo automatizado)."
+    }
+    else {
+        Write-Host "PowerShell 7 não foi encontrado nesta máquina. Este script precisa dele para funcionar plenamente." -ForegroundColor Yellow
+        $resp = Read-Host "Instalar o PowerShell 7 automaticamente agora? (S/N)"
+        if ($resp -and $resp.ToUpper() -eq 'S') {
+            if (Install-PowerShell7) {
+                $pwsh7 = Find-PwshPath
+                if ($pwsh7) {
+                    Write-Host "PowerShell 7 instalado. Relançando o script..." -ForegroundColor Green
+                    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath, '-IsRelaunched')
+                    foreach ($p in 'Acao', 'Origem', 'Destino', 'Modo') {
+                        if ($PSBoundParameters.ContainsKey($p)) { $argList += @("-$p", (Get-Variable -Name $p -ValueOnly)) }
+                    }
+                    $startSplat = @{
+                        FilePath         = $pwsh7
+                        ArgumentList     = $argList
+                        WorkingDirectory = (Get-Location)
+                        WindowStyle      = 'Normal'
+                    }
+                    if (Test-IsAdmin) { $startSplat['Verb'] = 'RunAs' }
+                    Start-Process @startSplat
+                    exit
+                }
+                Write-Warning "Instalação concluída, mas o pwsh.exe não foi localizado. Reinicie o script manualmente."
+            }
+            else {
+                Write-Warning "A instalação automática falhou em todos os métodos. Abrindo o menu de atualização..."
+                Menu-AtualizacaoPowerShell
+                Write-Host "Por favor, reinicie o script após a atualização." -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "Ok. O script não pode continuar no Windows PowerShell 5.x." -ForegroundColor Yellow
+        }
+        Pause-Script
+        exit
+    }
 }
 
 # Se chegou aqui, está no PS7+ ou foi relançado. Vamos verificar se existe uma versão ainda mais nova.

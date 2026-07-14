@@ -1,78 +1,41 @@
-# ====================== BEGIN NAV INDEX ======================
-# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L74    END NAV INDEX =======================
-#   L112   Ensure-FlowShortcut
-#   L134   Get-ChildrenByParent
-#   L135   Show-MenuLoop
-#   L158   ConvertTo-SafeLiteral
-#   L159   Normalize-MenuTitle
-#   L171   Get-ExpressionStringValue
-#   L184   Get-CommandStringLiteralValue
-#   L207   ConvertTo-Slug
-#   L222   Format-OrderPrefix
-#   L224   New-DirectorySafe
-#   L225   Write-FileSafe
-#   L243   Backup-OutputIfExists
-#   L254   Get-AstParentFunctionName
-#   L255   Test-MenuKey
-#   L256   Get-SwitchClauseKeys
-#   L271   Test-IsMenuSwitch
-#   L280   Get-CommandCallsFromAst
-#   L294   Get-FirstScriptFunctionCall
-#   L295   Get-FunctionCallsFromAst
-#   L296   Get-CaseCommands
-#   L307   Get-MenuTargetFromClause
-#   L315   New-ActionWrapperName
-#   L322   Get-MenuTitlesForSwitch
-#   L391   Write-NodeMetadata
-#   L410   Write-Manifest
-#   L423   Add-ReportItem
-#   L425   Initialize-SourceIndex
-#   L439   Write-Main
-#   L466   Export-FunctionCallChildren
-#   L481   Export-FunctionSubtree
-#   L487   Export-MenuSwitchChildren
-#   L541   Export-RootMenu
-#   L550   Write-Reports
-# ======================= END NAV INDEX =======================
-
 ﻿# ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L74    Ensure-FlowShortcut
-#   L96    Get-ChildrenByParent
-#   L97    Show-MenuLoop
-#   L120   ConvertTo-SafeLiteral
-#   L121   Normalize-MenuTitle
-#   L133   Get-ExpressionStringValue
-#   L146   Get-CommandStringLiteralValue
-#   L169   ConvertTo-Slug
-#   L184   Format-OrderPrefix
-#   L186   New-DirectorySafe
-#   L187   Write-FileSafe
-#   L205   Backup-OutputIfExists
-#   L216   Get-AstParentFunctionName
-#   L217   Test-MenuKey
-#   L218   Get-SwitchClauseKeys
-#   L233   Test-IsMenuSwitch
-#   L242   Get-CommandCallsFromAst
-#   L256   Get-FirstScriptFunctionCall
-#   L257   Get-FunctionCallsFromAst
-#   L258   Get-CaseCommands
-#   L269   Get-MenuTargetFromClause
-#   L277   New-ActionWrapperName
-#   L284   Get-MenuTitlesForSwitch
-#   L353   Write-NodeMetadata
-#   L372   Write-Manifest
-#   L385   Add-ReportItem
-#   L387   Initialize-SourceIndex
-#   L401   Write-Main
-#   L428   Export-FunctionCallChildren
-#   L443   Export-FunctionSubtree
-#   L449   Export-MenuSwitchChildren
-#   L503   Export-RootMenu
-#   L512   Write-Reports
+#   L75    Ensure-FlowShortcut
+#   L97    Get-ChildrenByParent
+#   L98    Show-MenuLoop
+#   L121   ConvertTo-SafeLiteral
+#   L122   Normalize-MenuTitle
+#   L134   Get-ExpressionStringValue
+#   L147   Get-CommandStringLiteralValue
+#   L170   ConvertTo-Slug
+#   L185   Format-OrderPrefix
+#   L187   New-DirectorySafe
+#   L188   Write-FileSafe
+#   L206   Backup-OutputIfExists
+#   L217   Get-AstParentFunctionName
+#   L218   Test-MenuKey
+#   L219   Get-SwitchClauseKeys
+#   L234   Test-IsMenuSwitch
+#   L243   Get-CommandCallsFromAst
+#   L257   Get-FirstScriptFunctionCall
+#   L258   Get-FunctionCallsFromAst
+#   L259   Get-CaseCommands
+#   L270   Get-MenuTargetFromClause
+#   L278   New-ActionWrapperName
+#   L285   Get-MenuTitlesForSwitch
+#   L354   Write-NodeMetadata
+#   L373   Write-Manifest
+#   L386   Add-ReportItem
+#   L388   Initialize-SourceIndex
+#   L402   Write-Main
+#   L429   Export-FunctionCallChildren
+#   L444   Export-FunctionSubtree
+#   L450   Export-MenuSwitchChildren
+#   L504   Export-RootMenu
+#   L513   Write-Reports
 # ======================= END NAV INDEX =======================
 
+# ====================== BEGIN NAV INDEX ======================
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

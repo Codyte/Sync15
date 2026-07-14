@@ -1,4 +1,26 @@
-﻿<#
+﻿# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L31    Pause-Local
+#   L36    Is-ServerOS
+#   L42    Set-DWord
+#   L52    Backup-Registro
+#   L78    Show-Estado
+#   L94    Toggle-PowerPlan
+#   L108   Clean-Temp
+#   L129   STARTUPS (com seleção por números) =================================
+#   L147   Get-Startups
+#   L245   Parse-Selection
+#   L286   Disable-StartupByNumber
+#   L362   Enable-StartupByNumber
+#   L404   Menu-Startups
+#   L448   Storage-Maintenance
+#   L493   Disk-SMART
+#   L509   Power-CPU-Tune
+#   L546   SearchIndexer-Toggle
+#   L562   Tasks-Noise
+# ======================= END NAV INDEX =======================
+
+<#
     Otimizacao.psm1 — funcoes de otimizacao/desempenho avancado extraidas do
     launcher Sync_Master.ps1 (Fase 2 do refator). Antes viviam ANINHADAS dentro de
     Menu-OtimizacaoAvancada (escopo fragil: so existiam quando aquele menu rodava).

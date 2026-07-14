@@ -1,4 +1,31 @@
-﻿<#
+﻿# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L55    Salvar-Diretorios
+#   L66    Menu-GerenciamentoDiretorios
+#   L130   Selecionar-DiretorioDaLista
+#   L168   ObterCaminhoPasta
+#   L189   Iniciar-Sincronizacao
+#   L269   Resolve-ShareToDiskInfoV2
+#   L328   VerificarEspacoEmDiscoV2
+#   L372   Get-TamanhoPastaBytesV2
+#   L379   Comparar-EspacoVsOrigemV2
+#   L419   Get-RobocopyArgs
+#   L463   Get-RobocopyStatus
+#   L481   Resolve-RobocopyTuning
+#   L513   ConvertTo-TamanhoLegivel
+#   L524   Format-RobocopyResumo
+#   L575   Get-ExclusoesPerfil
+#   L598   Test-OrigemEhPerfil
+#   L617   Measure-ArvoreRapido
+#   L639   Test-ParOrigemDestino
+#   L677   Show-RobocopyResultado
+#   L703   Start-RobocopyUnilateralSeguro
+#   L769   Start-RobocopyEspelho
+#   L831   Iniciar-SincronizacaoV2
+#   L836   Agendar-TarefaSincronizacao
+# ======================= END NAV INDEX =======================
+
+<#
     Sync.psm1 — engine de sincronizacao (robocopy) + diretorios salvos do Sync Master.
     Extraido do monolito legado (Fase 5). Depende de Core.psm1.
     Estado dos diretorios salvos (diretorios.json) mora no data dir do usuario
@@ -833,7 +860,11 @@ function Agendar-TarefaSincronizacao {
     $nomeTarefa = "SincronizacaoEngOrtiz_" + (Get-Date -Format "yyyyMMdd")
     $trigger = New-ScheduledTaskTrigger -Daily -At $hora
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$entryScript`" -Acao Sincronizar -Origem `"$($origemObj.Caminho)`" -Destino `"$($destinoObj.Caminho)`""
+    # Prefere o PS7 (caminho completo: a tarefa roda como SYSTEM, que pode nao ter pwsh no PATH).
+    # Sem pwsh instalado, powershell.exe serve: o launcher trata PS5 no modo automatizado sem prompt.
+    $pwshCmd = Get-Command -Name pwsh -ErrorAction SilentlyContinue
+    $exe = if ($pwshCmd -and $pwshCmd.Source) { $pwshCmd.Source } else { "powershell.exe" }
+    $action = New-ScheduledTaskAction -Execute $exe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$entryScript`" -Acao Sincronizar -Origem `"$($origemObj.Caminho)`" -Destino `"$($destinoObj.Caminho)`""
     
     try {
         Register-ScheduledTask -TaskName $nomeTarefa -Trigger $trigger -Action $action -Principal $principal -Description "Sincronização automática configurada pela Ferramenta de Engenharia." -Force

@@ -1,4 +1,16 @@
-﻿<#
+﻿# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L24    Remove-ToRecycleBin
+#   L38    Menu-GerenciamentoArquivos
+#   L53    Encontrar-ArquivosDuplicados
+#   L57    CONFIGURAÇÕES RÁPIDAS ===================
+#   L243   Get-FastXxHash64
+#   L259   Get-DuplicatesByHashLocal
+#   L449   Verificar-IntegridadeArquivos
+#   L473   Permissoes-Pasta
+# ======================= END NAV INDEX =======================
+
+<#
     Arquivos.psm1 — operacoes de arquivos (duplicados, integridade, permissoes, lixeira).
     Extraido do monolito legado (Fase 5). Depende de Core.psm1.
 #>

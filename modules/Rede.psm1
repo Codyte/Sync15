@@ -1,4 +1,24 @@
-﻿<#
+﻿# ====================== BEGIN NAV INDEX ======================
+# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
+#   L27    Menu-DiagnosticoRede
+#   L60    Test-TcpPort
+#   L80    Testar-PortaTCP
+#   L92    Ping-Sweep
+#   L118   ConvertFrom-PortSpec
+#   L137   Scan-PortasTCP
+#   L156   Scan-ARP
+#   L167   Descobrir-Hostnames
+#   L196   Whois-Lookup
+#   L206   Scan-Servicos
+#   L219   Mostrar-Netstat
+#   L224   Instalar-e-Testar-Speedtest
+#   L227   Run-Ookla
+#   L338   Menu-Rede
+#   L364   Configurar-TcpAutoTuning
+#   L404   Otimizar-QoS
+# ======================= END NAV INDEX =======================
+
+<#
     Rede.psm1 — diagnostico e otimizacao de rede do Sync Master.
     Extraido do monolito legado (Fase 5). Auto-contido; depende
     apenas de Core.psm1 (Pause-Script, Confirm-Action, Registrar-Log).

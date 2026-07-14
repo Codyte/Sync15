@@ -26,19 +26,24 @@ if (-not (Test-Path -LiteralPath $ScriptFullPath -PathType Leaf)) {
 
 $WorkingDirectory = Split-Path -Parent $ScriptFullPath
 
-$PwshPath = Get-Command pwsh.exe -ErrorAction SilentlyContinue |
-    Select-Object -First 1 -ExpandProperty Source
-
-if (-not $PwshPath) {
-    $PwshPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-}
-
-if (-not (Test-Path -LiteralPath $PwshPath -PathType Leaf)) {
-    throw "PowerShell não encontrado."
-}
+# O alvo é sempre o Windows PowerShell 5 (caminho fixo em todo Windows); a PARTE 1.1
+# do Sync_Master.ps1 relança em pwsh sozinha. Assim o .lnk não depende de onde
+# (ou se) o PS7 está instalado.
+$Ps5Path = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
 if (-not (Test-Path -LiteralPath $ShortcutDirectory -PathType Container)) {
     New-Item -ItemType Directory -Path $ShortcutDirectory -Force | Out-Null
+}
+
+# Atalho na MESMA pasta do script: referência relativa + "Iniciar em" vazio
+# (Explorer usa a pasta do .lnk como CWD) → sobrevive a mover/renomear a pasta.
+$SameDir = (Resolve-FullPath -Path $ShortcutDirectory).TrimEnd('\') -ieq $WorkingDirectory.TrimEnd('\')
+if ($SameDir) {
+    $ScriptRef  = ".\$(Split-Path -Leaf $ScriptFullPath)"
+    $LnkWorkDir = ""
+} else {
+    $ScriptRef  = $ScriptFullPath
+    $LnkWorkDir = $WorkingDirectory
 }
 
 $ShortcutPath = Join-Path $ShortcutDirectory "$ShortcutName.lnk"
@@ -46,33 +51,27 @@ $ShortcutPath = Join-Path $ShortcutDirectory "$ShortcutName.lnk"
 $WScriptShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WScriptShell.CreateShortcut($ShortcutPath)
 
+$Shortcut.TargetPath = $Ps5Path
+
 if ($RunAsAdmin) {
-    $Shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-
-    $escapedPwsh = $PwshPath.Replace("'", "''")
-    $escapedScript = $ScriptFullPath.Replace("'", "''")
-    $escapedWorkingDir = $WorkingDirectory.Replace("'", "''")
-
-    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process -FilePath '$escapedPwsh' -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$escapedScript`"' -WorkingDirectory '$escapedWorkingDir' -Verb RunAs`""
+    # Eleva via Start-Process; (Get-Location) resolve em tempo de execução, então a
+    # referência relativa continua válida mesmo com a pasta movida/renomeada.
+    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRef`"' -WorkingDirectory (Get-Location) -Verb RunAs`""
 } else {
-    $Shortcut.TargetPath = $PwshPath
-    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptFullPath`""
+    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRef`""
 }
 
-$Shortcut.WorkingDirectory = $WorkingDirectory
+$Shortcut.WorkingDirectory = $LnkWorkDir
 $Shortcut.WindowStyle = 1
 $Shortcut.Description = "Executar Sync Master"
-$Shortcut.IconLocation = "$PwshPath,0"
+$Shortcut.IconLocation = "$Ps5Path,0"
 $Shortcut.Save()
 
 Write-Host "Atalho criado em:" -ForegroundColor Green
 Write-Host $ShortcutPath
 Write-Host ""
 Write-Host "Script alvo:" -ForegroundColor Cyan
-Write-Host $ScriptFullPath
-Write-Host ""
-Write-Host "PowerShell usado:" -ForegroundColor Cyan
-Write-Host $PwshPath
+Write-Host $ScriptRef
 
 if ($RunAsAdmin) {
     Write-Host ""

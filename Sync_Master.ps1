@@ -1,6 +1,35 @@
 # ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L62    END NAV INDEX =======================
+#   L60    END NAV INDEX =======================
+#   L71    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
+#   L88    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
+#   L92    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
+#   L156   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
+#   L261   Menu-Otimizacao
+#   L295   Criar-PontoRestauracao
+#   L382   Restaurar-PontoRestauracao
+#   L519   Menu-LimpezaDisco
+#   L547   Configurar-ServicoDefrag
+#   L651   Utilitários robustos ===============================================
+#   L672   Menu-ReparoSistema
+#   L701   Get-PowerPlans
+#   L722   Criar-PlanoDeEnergia
+#   L738   Menu-CriarPlanoEnergia
+#   L759   Mostrar-EstadoOtimizacao
+#   L773   Menu-OtimizacaoAvancada
+#   L860   Menu-Desempenho
+#   L925   Menu-GerenciarAgentes
+#   L963   Gerenciar-ServicoDeAgente
+#   L1013  Menu-Ferramentas
+#   L1039  Menu-Avancado
+#   L1081  Gerenciar-EstadosOciososProcessador
+#   L1124  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
+#   L1159  Criar-App
+#   L1222  Executor
+#   L1296  Aliases de verbo aprovado (retrocompat) ---
+#   L1306  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
+# ======================= END NAV INDEX =======================
+
 #   L72    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
 #   L89    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
 #   L93    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
@@ -30,36 +59,6 @@
 #   L1307  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
 # ======================= END NAV INDEX =======================
 
-﻿# ====================== BEGIN NAV INDEX ======================
-# NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
-#   L40    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
-#   L57    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
-#   L61    PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) 
-#   L125   PARTE 2: REGIÃO CENTRALIZADA DE FUNÇÕES ---
-#   L211   Menu-Otimizacao
-#   L245   Criar-PontoRestauracao
-#   L332   Restaurar-PontoRestauracao
-#   L469   Menu-LimpezaDisco
-#   L497   Configurar-ServicoDefrag
-#   L601   Utilitários robustos ===============================================
-#   L622   Menu-ReparoSistema
-#   L651   Get-PowerPlans
-#   L672   Criar-PlanoDeEnergia
-#   L688   Menu-CriarPlanoEnergia
-#   L709   Mostrar-EstadoOtimizacao
-#   L723   Menu-OtimizacaoAvancada
-#   L810   Menu-Desempenho
-#   L875   Menu-GerenciarAgentes
-#   L913   Gerenciar-ServicoDeAgente
-#   L963   Menu-Ferramentas
-#   L989   Menu-Avancado
-#   L1031  Gerenciar-EstadosOciososProcessador
-#   L1074  Utilitário: enviar arquivo para a Lixeira (PS 5/7) ---
-#   L1109  Criar-App
-#   L1164  Executor
-#   L1237  Aliases de verbo aprovado (retrocompat v15) ---
-#   L1247  PARTE 3: LÓGICA DE EXECUÇÃO PRINCIPAL ---
-# ======================= END NAV INDEX =======================
 
 # ===================================================================
 # DESCRIÇÃO: Script para sincronização, backup e outras

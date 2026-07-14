@@ -1,4 +1,4 @@
-# ====================== BEGIN NAV INDEX ======================
+﻿# ====================== BEGIN NAV INDEX ======================
 # NAV INDEX — auto-generated symbol map (refresh via the navindex skill)
 #   L39    PARTE 1: BLOCO DE PARÂMETROS ÚNICO ---
 #   L56    PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
@@ -53,11 +53,12 @@ param (
     [ValidateSet("Unilateral", "Bilateral")]
     [string]$Modo = "Unilateral"
 )
-# --- PARTE 1.1: Relançamento automático em PowerShell 7+ ----------------
-# Se estamos no Windows PowerShell 5.x e ainda não relançamos, abra o PS7 (pwsh.exe)
-# passando os mesmos parâmetros e feche o host atual.
+
+
 
 # --- PARTE 1.1: Relançamento automático em PowerShell 7+ (compatível PS 5) ---
+# Se estamos no Windows PowerShell 5.x e ainda não relançamos, abra o PS7 (pwsh.exe)
+# passando os mesmos parâmetros e feche o host atual.
 if ($PSVersionTable.PSVersion.Major -lt 7 -and -not $IsRelaunched) {
 
     # Descobre o pwsh.exe (PS5 não entende ?. então use este padrão)

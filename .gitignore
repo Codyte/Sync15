@@ -15,5 +15,5 @@ graphify-out/
 SyncMaster-Flow/
 SyncMaster-FunctionAudit/
 
-# Atalhos binarios (gerados por Create-*Shortcut.ps1)
-#*.lnk
+# Atalhos binarios (gerados por Create-*Shortcut.ps1; entrada versionada = Sync Master.cmd)
+*.lnk

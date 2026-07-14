@@ -35,16 +35,11 @@ if (-not (Test-Path -LiteralPath $ShortcutDirectory -PathType Container)) {
     New-Item -ItemType Directory -Path $ShortcutDirectory -Force | Out-Null
 }
 
-# Atalho na MESMA pasta do script: referência relativa + "Iniciar em" vazio
-# (Explorer usa a pasta do .lnk como CWD) → sobrevive a mover/renomear a pasta.
-$SameDir = (Resolve-FullPath -Path $ShortcutDirectory).TrimEnd('\') -ieq $WorkingDirectory.TrimEnd('\')
-if ($SameDir) {
-    $ScriptRef  = ".\$(Split-Path -Leaf $ScriptFullPath)"
-    $LnkWorkDir = ""
-} else {
-    $ScriptRef  = $ScriptFullPath
-    $LnkWorkDir = $WorkingDirectory
-}
+# O .lnk grava caminho ABSOLUTO por necessidade: um atalho não conhece a própria
+# pasta em runtime ("Iniciar em" vazio → CWD = System32). Entrada independente de
+# pasta é o "Sync Master.cmd" (usa %~dp0), não este gerador.
+$ScriptRef  = $ScriptFullPath
+$LnkWorkDir = $WorkingDirectory
 
 $ShortcutPath = Join-Path $ShortcutDirectory "$ShortcutName.lnk"
 
@@ -54,9 +49,8 @@ $Shortcut = $WScriptShell.CreateShortcut($ShortcutPath)
 $Shortcut.TargetPath = $Ps5Path
 
 if ($RunAsAdmin) {
-    # Eleva via Start-Process; (Get-Location) resolve em tempo de execução, então a
-    # referência relativa continua válida mesmo com a pasta movida/renomeada.
-    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRef`"' -WorkingDirectory (Get-Location) -Verb RunAs`""
+    # [char]34 evita aspas duplas aninhadas (CommandLineToArgvW as remove/mangleia).
+    $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"Start-Process powershell -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File ' + [char]34 + '$ScriptRef' + [char]34) -Verb RunAs`""
 } else {
     $Shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptRef`""
 }
